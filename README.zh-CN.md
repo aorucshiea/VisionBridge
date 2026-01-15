@@ -36,12 +36,12 @@
 
 | 供应商 | 描述 |
 |--------|------|
-| **iflow** ⭐ | 每天约 2000 次 API 调用，包含 GLM-4.6、Qwen3、DeepSeek |
-| **NVIDIA NIM** ⭐ | 1000-5000 credits 用于开发，包含 GLM-4.7、MiniMax-M2.1 |
-| **anigravity** ⭐ | 每周可免费使用一定额度的 Gemini 和 Claude 最新模型 |
-| **ModelScope (魔塔)** ⭐ | 每天 2000 次免费调用，单模型 500 次/天，覆盖 Qwen、DeepSeek、GLM |
-| **Free Qwen3** 🆓 | 完全免费，无需注册 |
-| **Free QwQ-32B** 🆓 | 完全免费，无需注册，无调用上限 |
+| **iflow** ⭐ | 每天约 2000 次 API 调用，包含 GLM-4.6、Qwen3、DeepSeek - 正常人完全够用 |
+| **NVIDIA NIM** ⭐ | 1000-5000 credits 用于开发，包含 GLM-4.7、MiniMax-M2.1 - 正常人完全够用 |
+| **anigravity** ⭐ | 每周可免费使用一定额度的 Gemini 和 Claude 最新模型 - 正常人完全够用 |
+| **ModelScope (魔塔)** ⭐ | 每天 2000 次免费调用，单模型 500 次/天，覆盖 Qwen、DeepSeek、GLM - 正常人完全够用 |
+| **Free Qwen3** 🆓 | 完全免费，无需注册 - 正常人完全够用 |
+| **Free QwQ-32B** 🆓 | 完全免费，无需注册，无调用上限 - 正常人完全够用 |
 
 **更多选择：**
 
