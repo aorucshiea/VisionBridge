@@ -1,0 +1,1614 @@
+import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { Settings, Image as ImageIcon, MessageSquare, Save, CheckCircle, Languages, Cpu, Search, Globe, Key, Activity, Server, Minus, Square, X as CloseIcon, Zap, Palette, ChevronDown, ChevronRight, Sparkles, Eye, EyeOff } from 'lucide-react'
+import ScreenshotMask from './components/ScreenshotMask'
+import ResultView from './components/ResultView'
+import axios from 'axios'
+
+// Helper function to convert hex to rgba
+const hexToRgba = (hex: string, alpha: number): string => {
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
+// Theme configurations with improved color schemes
+const themes = {
+  light: {
+    name: '白日',
+    nameEn: 'Light',
+    primary: '#2563EB',
+    background: '#F8FAFC',
+    card: '#FFFFFF',
+    text: '#0F172A',
+    textSecondary: '#475569',
+    textMuted: '#94A3B8',
+    border: '#E2E8F0',
+    accent: '#3B82F6',
+    surface: '#FFFFFF',
+    inputBg: '#F1F5F9',
+    inputBorder: '#CBD5E1',
+    inputFocus: '#3B82F6',
+  },
+  dark: {
+    name: '黑夜',
+    nameEn: 'Dark',
+    primary: '#60A5FA',
+    background: '#0F172A',
+    card: '#1E293B',
+    text: '#F1F5F9',
+    textSecondary: '#94A3B8',
+    textMuted: '#64748B',
+    border: '#334155',
+    accent: '#60A5FA',
+    surface: '#1E293B',
+    inputBg: '#0F172A',
+    inputBorder: '#334155',
+    inputFocus: '#60A5FA',
+  },
+  moonlight: {
+    name: '月光',
+    nameEn: 'Moonlight',
+    primary: '#A78BFA',
+    background: '#1E1B4B',
+    card: '#312E81',
+    text: '#E0E7FF',
+    textSecondary: '#A5B4FC',
+    textMuted: '#818CF8',
+    border: '#4338CA',
+    accent: '#A78BFA',
+    surface: '#312E81',
+    inputBg: '#1E1B4B',
+    inputBorder: '#4338CA',
+    inputFocus: '#A78BFA',
+  },
+  arctic: {
+    name: '北极',
+    nameEn: 'Arctic',
+    primary: '#22D3EE',
+    background: '#083344',
+    card: '#164E63',
+    text: '#ECFEFF',
+    textSecondary: '#A5F3FC',
+    textMuted: '#67E8F9',
+    border: '#155E75',
+    accent: '#22D3EE',
+    surface: '#164E63',
+    inputBg: '#083344',
+    inputBorder: '#155E75',
+    inputFocus: '#22D3EE',
+  }
+}
+
+declare global {
+  interface Window {
+    ipcRenderer: any
+    currentAbortController: AbortController | null
+  }
+}
+
+function App() {
+  const [windowType] = useState<string>(() => {
+    const params = new URLSearchParams(window.location.search)
+    const windowParam = params.get('window')
+    if (windowParam) return windowParam
+
+    const hash = window.location.hash
+    if (hash.includes('mask')) return 'mask'
+    if (hash.includes('result')) return 'result'
+    return 'main'
+  })
+
+  const [activeTab, setActiveTab] = useState<'translate' | 'settings'>('translate')
+  const [translateMode, setTranslateMode] = useState<'input' | 'result'>('input')
+  const [translateResult, setTranslateResult] = useState('')
+  const [explainResult, setExplainResult] = useState('')
+  const [isProcessing, setIsProcessing] = useState(false)
+  const isProcessingRef = useRef(false)
+  const [settings, setSettings] = useState<any>({
+    vlmProvider: 'ollama',
+    vlmModel: 'deepseek-ocr:3b',
+    vlmApiKey: '',
+    vlmBaseUrl: 'http://127.0.0.1:11434',
+    vlmTranslatePrompt: 'Translate the text in the image to natural, fluent Chinese. Output ONLY the translated text, nothing else.',
+    vlmExplainPrompt: 'Analyze the image and explain the content in detail in Chinese. Output ONLY the explanation, nothing else.',
+    mode: 'VLM',
+    ocrProvider: 'ollama',
+    ocrApiKey: '',
+    ocrBaseUrl: 'http://127.0.0.1:11434',
+    ocrModel: 'deepseek-ocr:3b',
+    llmProvider: 'ollama',
+    llmModel: 'rnj-1:8b-instruct-q8_0',
+    llmApiKey: '',
+    llmBaseUrl: 'http://127.0.0.1:11434',
+    llmTranslatePrompt: 'Translate the following text to Chinese. Output ONLY the translation, nothing else.',
+    llmExplainPrompt: 'Explain the following text in detail in Chinese. Output ONLY the explanation, nothing else.',
+    vlm2Provider: 'ollama',
+    vlm2Model: 'qwen2-vl:7b',
+    vlm2ApiKey: '',
+    vlm2BaseUrl: 'http://127.0.0.1:11434',
+    vlm2JsonPrompt: '将以下图片转换为结构化的JSON格式。请提取图片中的所有关键信息，包括：\n1. 主要对象和元素\n2. 文字内容（如果有）\n3. 颜色和布局\n4. 任何其他重要细节\n\n输出格式：\n{\n  "main_objects": [],\n  "text_content": "",\n  "colors": [],\n  "layout": "",\n  "other_details": ""\n}',
+    llm2Provider: 'ollama',
+    llm2Model: 'qwen2:7b',
+    llm2ApiKey: '',
+    llm2BaseUrl: 'http://127.0.0.1:11434',
+    llm2TranslatePrompt: '图片描述：\n{json_data}\n\n请根据以上图片描述进行翻译。直接输出翻译结果，不要说冗余的话。',
+    llm2ExplainPrompt: '图片描述：\n{json_data}\n\n请根据以上图片描述进行详细解释。直接输出解释内容，不要说冗余的话。',
+    enableTextSelection: false,
+    theme: 'light',
+    language: 'zh'
+  })
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const [testStatus, setTestStatus] = useState<Record<'vlm' | 'ocr' | 'llm' | 'vlm2' | 'llm2', 'idle' | 'testing' | 'success' | 'error'>>({
+    vlm: 'idle',
+    ocr: 'idle',
+    llm: 'idle',
+    vlm2: 'idle',
+    llm2: 'idle'
+  })
+  const [testMessage, setTestMessage] = useState<Record<'vlm' | 'ocr' | 'llm' | 'vlm2' | 'llm2', string>>({
+    vlm: '',
+    ocr: '',
+    llm: '',
+    vlm2: '',
+    llm2: ''
+  })
+  const [showApiKeys, setShowApiKeys] = useState<Record<'vlm' | 'ocr' | 'llm' | 'vlm2' | 'llm2', boolean>>({
+    vlm: false,
+    ocr: false,
+    llm: false,
+    vlm2: false,
+    llm2: false
+  })
+  const [savedConfigurations, setSavedConfigurations] = useState<any[]>([])
+  const [showSavedConfigs, setShowSavedConfigs] = useState(false)
+  const [configName, setConfigName] = useState('')
+  const [configTags, setConfigTags] = useState<string[]>([])
+  const [customTagInput, setCustomTagInput] = useState('')
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+    vlm: true,
+    ocr: true,
+    llm: true,
+    vlm2: true,
+    llm2: true,
+  })
+  const processScreenshotRef = React.useRef<any>()
+
+  useEffect(() => {
+    if (windowType !== 'main') {
+      document.body.style.background = 'transparent'
+      document.documentElement.style.background = 'transparent'
+    }
+
+    if (window.ipcRenderer) {
+      window.ipcRenderer.getSettings().then((res: any) => {
+        if (res) {
+          // Merge with default settings to ensure all properties exist
+          setSettings(prev => ({ ...prev, ...res }))
+        }
+      }).catch(err => {
+        console.error('Failed to load settings:', err)
+      })
+
+      if (windowType === 'main') {
+        window.ipcRenderer.getSavedConfigurations().then((configs: any[]) => {
+          setSavedConfigurations(configs)
+        }).catch(err => {
+          console.error('Failed to load saved configurations:', err)
+        })
+      }
+    }
+  }, [windowType])
+
+  const handleCapture = async (region: { x: number; y: number; width: number; height: number }, mode: 'translate' | 'explain') => {
+    console.log(`[App] handleCapture called - Mode: ${mode}, Region:`, region)
+    if (window.ipcRenderer) {
+      window.ipcRenderer.send('process-screenshot', { region, mode })
+      window.ipcRenderer.closeMask()
+    }
+  }
+
+  const processScreenshot = useCallback(async (region: { x: number; y: number; width: number; height: number }, mode: 'translate' | 'explain') => {
+    if (isProcessingRef.current) {
+      console.log('[App] Already processing, skipping duplicate request')
+      return
+    }
+
+    isProcessingRef.current = true
+
+    if (window.currentAbortController) {
+      console.log('[App] Cancelling previous request')
+      window.currentAbortController.abort()
+    }
+
+    const abortController = new AbortController()
+    window.currentAbortController = abortController
+
+    if (window.ipcRenderer) {
+      window.ipcRenderer.showResult({ x: region.x + region.width + 10, y: region.y, content: 'Processing...' })
+    }
+
+    console.log(`[App] Starting capture - Mode: ${mode}, Pipeline: ${settings.mode}`)
+
+    try {
+      const dataUrl = await window.ipcRenderer.captureScreen()
+      const img = new Image()
+      img.src = dataUrl
+      await new Promise(resolve => img.onload = resolve)
+
+      const canvas = document.createElement('canvas')
+      canvas.width = region.width
+      canvas.height = region.height
+      const ctx = canvas.getContext('2d')
+      const dpr = window.devicePixelRatio || 1
+
+      const drawX = Math.round(region.x * dpr)
+      const drawY = Math.round(region.y * dpr)
+      const drawW = Math.round(region.width * dpr)
+      const drawH = Math.round(region.height * dpr)
+
+      ctx?.drawImage(img, drawX, drawY, drawW, drawH, 0, 0, region.width, region.height)
+
+      const MIN_IMAGE_SIZE = 100
+      let finalCanvas = canvas
+      if (region.width < MIN_IMAGE_SIZE || region.height < MIN_IMAGE_SIZE) {
+        const resizedCanvas = document.createElement('canvas')
+        const scale = Math.max(MIN_IMAGE_SIZE / region.width, MIN_IMAGE_SIZE / region.height)
+        resizedCanvas.width = Math.round(region.width * scale)
+        resizedCanvas.height = Math.round(region.height * scale)
+
+        const resizedCtx = resizedCanvas.getContext('2d')
+        resizedCtx?.drawImage(canvas, 0, 0, resizedCanvas.width, resizedCanvas.height)
+        finalCanvas = resizedCanvas
+      }
+
+      const croppedBase64 = finalCanvas.toDataURL('image/jpeg', 0.9).split(',')[1]
+
+      let result = ''
+      if (settings.mode === 'VLM') {
+        result = await window.ipcRenderer.callAI({
+          provider: settings.vlmProvider,
+          apiKey: settings.vlmApiKey,
+          baseUrl: settings.vlmBaseUrl,
+          model: settings.vlmModel
+        }, {
+          prompt: mode === 'translate' ? settings.vlmTranslatePrompt : settings.vlmExplainPrompt,
+          images: [croppedBase64]
+        })
+      } else if (settings.mode === 'OCR+LLM') {
+        const ocrText = await window.ipcRenderer.callOCR({
+          provider: settings.ocrProvider,
+          apiKey: settings.ocrApiKey,
+          baseUrl: settings.ocrBaseUrl,
+          model: settings.ocrModel
+        }, croppedBase64)
+
+        if (!ocrText || ocrText.trim().length === 0) {
+          throw new Error('OCR 未能识别到选区内的文字。')
+        }
+
+        const llmPrompt = (mode === 'translate' ? settings.llmTranslatePrompt : settings.llmExplainPrompt) + "\n\n选区文字如下：\n" + ocrText
+        result = await window.ipcRenderer.callAI({
+          provider: settings.llmProvider,
+          apiKey: settings.llmApiKey,
+          baseUrl: settings.llmBaseUrl,
+          model: settings.llmModel
+        }, {
+          prompt: llmPrompt
+        })
+      } else if (settings.mode === 'VLM+LLM') {
+        const jsonData = await window.ipcRenderer.callAI({
+          provider: settings.vlm2Provider,
+          apiKey: settings.vlm2ApiKey,
+          baseUrl: settings.vlm2BaseUrl,
+          model: settings.vlm2Model
+        }, {
+          prompt: settings.vlm2JsonPrompt,
+          images: [croppedBase64]
+        })
+
+        const llmPrompt = (mode === 'translate' ? settings.llm2TranslatePrompt : settings.llm2ExplainPrompt).replace('{json_data}', jsonData)
+        result = await window.ipcRenderer.callAI({
+          provider: settings.llm2Provider,
+          apiKey: settings.llm2ApiKey,
+          baseUrl: settings.llm2BaseUrl,
+          model: settings.llm2Model
+        }, {
+          prompt: llmPrompt
+        })
+      }
+
+      window.ipcRenderer.showResult({ x: region.x + region.width + 10, y: region.y, content: result })
+    } catch (error: any) {
+      console.error(`[App] Error during capture:`, error)
+      if (error.name === 'AbortError') {
+        window.ipcRenderer.hideResult()
+      } else {
+        window.ipcRenderer.showResult({ x: region.x + region.width + 10, y: region.y, content: `Error: ${error.message}` })
+      }
+    } finally {
+      if (window.currentAbortController === abortController) {
+        window.currentAbortController = null
+      }
+      isProcessingRef.current = false
+    }
+  }, [settings])
+
+  processScreenshotRef.current = processScreenshot
+
+  useEffect(() => {
+    if (windowType === 'main' && window.ipcRenderer) {
+      const handleProcessScreenshot = (_event: any, data: { region: any, mode: any }) => {
+        if (processScreenshotRef.current) {
+          processScreenshotRef.current(data.region, data.mode)
+        }
+      }
+
+      window.ipcRenderer.on('process-screenshot', handleProcessScreenshot)
+
+      return () => {
+        window.ipcRenderer.off('process-screenshot', handleProcessScreenshot)
+      }
+    }
+  }, [windowType])
+
+  useEffect(() => {
+    if (windowType === 'main' && window.ipcRenderer) {
+      const handleCancelRequests = () => {
+        if (window.currentAbortController) {
+          window.currentAbortController.abort()
+        }
+      }
+
+      window.ipcRenderer.on('cancel-requests', handleCancelRequests)
+
+      return () => {
+        window.ipcRenderer.off('cancel-requests', handleCancelRequests)
+      }
+    }
+  }, [windowType])
+
+  const handleSaveSettings = async () => {
+    const modelNames = [settings.vlmModel, settings.ocrModel, settings.llmModel, settings.vlm2Model, settings.llm2Model]
+    const modelFields = ['VLM模型', 'OCR模型', 'LLM模型', 'VLM2模型', 'LLM2模型']
+
+    for (let i = 0; i < modelNames.length; i++) {
+      const modelName = modelNames[i]
+      if (modelName) {
+        if (modelName !== modelName.trim()) {
+          alert(`${modelFields[i]}名称包含前后空格，请删除空格后保存`)
+          return
+        }
+        if (!/^[a-zA-Z0-9:_\-\.\/]+$/.test(modelName)) {
+          alert(`${modelFields[i]}名称包含非法字符。只允许字母、数字、冒号、连字符、下划线、点和斜杠`)
+          return
+        }
+      }
+    }
+
+    setSaveStatus('saving')
+    try {
+      const result = await window.ipcRenderer.saveSettings(settings)
+      if (result.success) {
+        setSaveStatus('saved')
+        setTimeout(() => setSaveStatus('idle'), 2000)
+      } else {
+        console.error('Failed to save settings:', result.error)
+        setSaveStatus('idle')
+      }
+    } catch (error: any) {
+      console.error('Error saving settings:', error)
+      setSaveStatus('idle')
+    }
+  }
+
+  const handleTestConnection = async (type: 'vlm' | 'ocr' | 'llm' | 'vlm2' | 'llm2') => {
+    setTestStatus(prev => ({ ...prev, [type]: 'testing' }))
+    setTestMessage(prev => ({ ...prev, [type]: '正在测试连接...' }))
+
+    try {
+      let config: any
+      if (type === 'vlm') {
+        config = {
+          provider: settings.vlmProvider,
+          apiKey: settings.vlmApiKey,
+          baseUrl: settings.vlmBaseUrl,
+          model: settings.vlmModel
+        }
+      } else if (type === 'ocr') {
+        config = {
+          provider: settings.ocrProvider,
+          apiKey: settings.ocrApiKey,
+          baseUrl: settings.ocrBaseUrl,
+          model: settings.ocrModel
+        }
+      } else if (type === 'llm') {
+        config = {
+          provider: settings.llmProvider,
+          apiKey: settings.llmApiKey,
+          baseUrl: settings.llmBaseUrl,
+          model: settings.llmModel
+        }
+      } else if (type === 'vlm2') {
+        config = {
+          provider: settings.vlm2Provider,
+          apiKey: settings.vlm2ApiKey,
+          baseUrl: settings.vlm2BaseUrl,
+          model: settings.vlm2Model
+        }
+      } else if (type === 'llm2') {
+        config = {
+          provider: settings.llm2Provider,
+          apiKey: settings.llm2ApiKey,
+          baseUrl: settings.llm2BaseUrl,
+          model: settings.llm2Model
+        }
+      }
+
+      const result = await window.ipcRenderer.testConnection(config, type)
+      if (result.success && result.available) {
+        setTestStatus(prev => ({ ...prev, [type]: 'success' }))
+        setTestMessage(prev => ({ ...prev, [type]: result.message }))
+        setTimeout(() => {
+          setTestStatus(prev => ({ ...prev, [type]: 'idle' }))
+          setTestMessage(prev => ({ ...prev, [type]: '' }))
+        }, 3000)
+      } else {
+        setTestStatus(prev => ({ ...prev, [type]: 'error' }))
+        setTestMessage(prev => ({ ...prev, [type]: result.message }))
+        setTimeout(() => {
+          setTestStatus(prev => ({ ...prev, [type]: 'idle' }))
+          setTestMessage(prev => ({ ...prev, [type]: '' }))
+        }, 5000)
+      }
+    } catch (error: any) {
+      setTestStatus(prev => ({ ...prev, [type]: 'error' }))
+      setTestMessage(prev => ({ ...prev, [type]: '测试失败: ' + error.message }))
+      setTimeout(() => {
+        setTestStatus(prev => ({ ...prev, [type]: 'idle' }))
+        setTestMessage(prev => ({ ...prev, [type]: '' }))
+      }, 5000)
+    }
+  }
+
+  const handleSaveConfiguration = async () => {
+    if (!configName.trim()) {
+      alert('请输入配置名称')
+      return
+    }
+
+    const configData = {
+      name: configName,
+      pipeline: settings.mode,
+      tags: configTags,
+      config: {
+        vlmProvider: settings.vlmProvider,
+        vlmModel: settings.vlmModel,
+        vlmBaseUrl: settings.vlmBaseUrl,
+        vlmApiKey: settings.vlmApiKey,
+        ocrProvider: settings.ocrProvider,
+        ocrModel: settings.ocrModel,
+        ocrBaseUrl: settings.ocrBaseUrl,
+        ocrApiKey: settings.ocrApiKey,
+        llmProvider: settings.llmProvider,
+        llmModel: settings.llmModel,
+        llmBaseUrl: settings.llmBaseUrl,
+        llmApiKey: settings.llmApiKey,
+        vlm2Provider: settings.vlm2Provider,
+        vlm2Model: settings.vlm2Model,
+        vlm2BaseUrl: settings.vlm2BaseUrl,
+        vlm2ApiKey: settings.vlm2ApiKey,
+        vlm2JsonPrompt: settings.vlm2JsonPrompt,
+        llm2Provider: settings.llm2Provider,
+        llm2Model: settings.llm2Model,
+        llm2BaseUrl: settings.llm2BaseUrl,
+        llm2ApiKey: settings.llm2ApiKey,
+        llm2TranslatePrompt: settings.llm2TranslatePrompt,
+        llm2ExplainPrompt: settings.llm2ExplainPrompt
+      }
+    }
+
+    try {
+      const result = await window.ipcRenderer.saveConfiguration(configData)
+      if (result.success) {
+        const configs = await window.ipcRenderer.getSavedConfigurations()
+        setSavedConfigurations(configs)
+        setConfigName('')
+        setConfigTags([])
+        alert('配置已保存')
+      }
+    } catch (error: any) {
+      alert('保存失败: ' + error.message)
+    }
+  }
+
+  const handleLoadConfiguration = async (config: any) => {
+    const newSettings = {
+      ...settings,
+      mode: config.pipeline,
+      vlmProvider: config.config.vlmProvider || 'ollama',
+      vlmModel: config.config.vlmModel || '',
+      vlmBaseUrl: config.config.vlmBaseUrl || '',
+      vlmApiKey: config.config.vlmApiKey || '',
+      ocrProvider: config.config.ocrProvider || 'ollama',
+      ocrModel: config.config.ocrModel || '',
+      ocrBaseUrl: config.config.ocrBaseUrl || '',
+      ocrApiKey: config.config.ocrApiKey || '',
+      llmProvider: config.config.llmProvider || 'ollama',
+      llmModel: config.config.llmModel || '',
+      llmBaseUrl: config.config.llmBaseUrl || '',
+      llmApiKey: config.config.llmApiKey || '',
+      vlm2Provider: config.config.vlm2Provider || 'ollama',
+      vlm2Model: config.config.vlm2Model || '',
+      vlm2BaseUrl: config.config.vlm2BaseUrl || '',
+      vlm2ApiKey: config.config.vlm2ApiKey || '',
+      vlm2JsonPrompt: config.config.vlm2JsonPrompt || '',
+      llm2Provider: config.config.llm2Provider || 'ollama',
+      llm2Model: config.config.llm2Model || '',
+      llm2BaseUrl: config.config.llm2BaseUrl || '',
+      llm2ApiKey: config.config.llm2ApiKey || '',
+      llm2TranslatePrompt: config.config.llm2TranslatePrompt || '',
+      llm2ExplainPrompt: config.config.llm2ExplainPrompt || ''
+    }
+    setSettings(newSettings)
+    setShowSavedConfigs(false)
+  }
+
+  const handleDeleteConfiguration = async (id: string) => {
+    if (confirm('确定要删除这个配置吗？')) {
+      try {
+        await window.ipcRenderer.deleteConfiguration(id)
+        const configs = await window.ipcRenderer.getSavedConfigurations()
+        setSavedConfigurations(configs)
+      } catch (error: any) {
+        alert('删除失败: ' + error.message)
+      }
+    }
+  }
+
+  const getApiFormatLabel = (provider: string) => {
+    switch (provider) {
+      case 'ollama':
+        return 'Ollama API'
+      case 'openai':
+      case 'custom':
+        return 'OpenAI API'
+      case 'anthropic':
+        return 'Anthropic API'
+      default:
+        return 'Unknown'
+    }
+  }
+
+  const apiFormatTags = ['OpenAI API', 'Anthropic API', 'Ollama API', 'Gemini API']
+  const modelTypeTags = ['Vision Model', 'Language Model', 'Inference Model', 'Non-Inference Model']
+
+  const handleAddTag = (tag: string) => {
+    if (!configTags.includes(tag)) {
+      setConfigTags([...configTags, tag])
+    }
+  }
+
+  const handleRemoveTag = (tag: string) => {
+    setConfigTags(configTags.filter(t => t !== tag))
+  }
+
+  const handleAddCustomTag = () => {
+    const tag = customTagInput.trim()
+    if (tag && !configTags.includes(tag)) {
+      setConfigTags([...configTags, tag])
+      setCustomTagInput('')
+    }
+  }
+
+  const toggleSection = (section: string) => {
+    setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }))
+  }
+
+  if (windowType === 'result') return <ResultView />
+  if (windowType === 'mask') return (
+    <div className="w-screen h-screen bg-transparent overflow-hidden no-drag">
+      <ScreenshotMask onCapture={handleCapture} onCancel={() => window.ipcRenderer.closeMask()} />
+    </div>
+  )
+
+  const currentTheme = themes[settings.theme as keyof typeof themes] || themes.light
+
+  return (
+    <div className="min-h-screen flex flex-col font-body select-none overflow-hidden" style={{ backgroundColor: currentTheme.background, color: currentTheme.text }}>
+      {/* Header */}
+      <header className="h-14 border-b flex items-center justify-between px-5 drag shrink-0 transition-colors duration-200" style={{ backgroundColor: currentTheme.card, borderColor: currentTheme.border }}>
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center shadow-soft transition-all duration-200 hover:shadow-soft-lg" style={{ backgroundColor: currentTheme.primary }}>
+            <Globe size={16} className="text-white" />
+          </div>
+          <h1 className="text-base font-heading font-bold tracking-tight" style={{ color: currentTheme.text }}>Vision Bridge</h1>
+        </div>
+
+        <div className="flex gap-1.5 no-drag ml-auto mr-5">
+          <button onClick={() => { console.log('Minimize clicked'); window.ipcRenderer.minimizeWindow(); }} className="w-8 h-8 flex items-center justify-center rounded-lg transition-all duration-200 hover:bg-black/5 dark:hover:bg-white/10" style={{ color: currentTheme.textSecondary }}>
+            <Minus size={14} />
+          </button>
+          <button onClick={() => { console.log('Maximize clicked'); window.ipcRenderer.maximizeWindow(); }} className="w-8 h-8 flex items-center justify-center rounded-lg transition-all duration-200 hover:bg-black/5 dark:hover:bg-white/10" style={{ color: currentTheme.textSecondary }}>
+            <Square size={12} />
+          </button>
+          <button onClick={() => { console.log('Close clicked'); window.ipcRenderer.closeWindow(); }} className="w-8 h-8 flex items-center justify-center rounded-lg transition-all duration-200 hover:bg-red-50 hover:text-red-500" style={{ color: currentTheme.textSecondary }}>
+            <CloseIcon size={14} />
+          </button>
+        </div>
+
+        <div className="flex gap-1 no-drag border-l pl-5" style={{ borderColor: currentTheme.border }}>
+          <button
+            onClick={() => setActiveTab('translate')}
+            className={`w-9 h-9 flex items-center justify-center rounded-lg transition-all duration-200 ${
+              activeTab === 'translate'
+                ? 'bg-primary-100 text-primary-600'
+                : 'text-slate-400 hover:bg-black/5 dark:hover:bg-white/10'
+            }`}
+            title="截图"
+          >
+            <ImageIcon size={18} />
+          </button>
+          <button
+            onClick={() => setActiveTab('settings')}
+            className={`w-9 h-9 flex items-center justify-center rounded-lg transition-all duration-200 ${
+              activeTab === 'settings'
+                ? 'bg-primary-100 text-primary-600'
+                : 'text-slate-400 hover:bg-black/5 dark:hover:bg-white/10'
+            }`}
+            title="设置"
+          >
+            <Settings size={18} />
+          </button>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="flex-1 p-5 overflow-auto custom-scrollbar" style={{ backgroundColor: currentTheme.background }}>
+        {activeTab === 'translate' ? (
+          <div className="flex flex-col items-center justify-center h-full gap-8 text-center animate-fade-in">
+             <div className="relative">
+              <div className="w-28 h-28 rounded-full flex items-center justify-center animate-pulse-soft" style={{ backgroundColor: hexToRgba(currentTheme.primary, 0.15) }}>
+                <ImageIcon size={56} style={{ color: currentTheme.primary }} />
+              </div>
+              <div className="absolute -bottom-1 -right-1 w-9 h-9 rounded-full shadow-soft flex items-center justify-center border-2 transition-all duration-200" style={{ backgroundColor: currentTheme.card, borderColor: currentTheme.border }}>
+                <div className="w-2.5 h-2.5 bg-success-500 rounded-full"></div>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xl font-heading font-bold tracking-tight" style={{ color: currentTheme.text }}>准备就绪</p>
+              <p className="text-xs font-medium tracking-widest uppercase" style={{ color: currentTheme.textSecondary }}>快捷键: Alt + A</p>
+            </div>
+            <button
+              onClick={() => window.ipcRenderer.openMask()}
+              className="px-8 py-3.5 text-white rounded-xl text-sm font-heading font-semibold shadow-soft-lg transition-all duration-200 flex items-center gap-2.5 hover:scale-105 active:scale-95"
+              style={{
+                backgroundColor: currentTheme.primary,
+                boxShadow: `0 4px 20px ${hexToRgba(currentTheme.primary, 0.4)}`
+              }}
+            >
+              <ImageIcon size={18} />
+              开始截图
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-5 pb-8 animate-slide-up w-full">
+            {/* Pipeline Selection */}
+            <section className="space-y-3">
+              <div className="flex items-center gap-2 px-1">
+                <Activity size={14} style={{ color: currentTheme.primary }} />
+                <h2 className="text-xs font-heading font-bold uppercase tracking-wider" style={{ color: currentTheme.textSecondary }}>处理管道</h2>
+              </div>
+              <div className="grid grid-cols-3 gap-2 p-1.5 rounded-xl border transition-all duration-200" style={{ backgroundColor: hexToRgba(currentTheme.card, 0.1), borderColor: currentTheme.border }}>
+                <button
+                  onClick={() => setSettings({...settings, mode: 'VLM'})}
+                  className={`flex flex-col items-center gap-2 py-4 rounded-lg transition-all duration-200 ${
+                    settings.mode === 'VLM' ? 'shadow-soft' : 'hover:bg-white/50 dark:hover:bg-white/5'
+                  }`}
+                  style={{
+                    backgroundColor: settings.mode === 'VLM' ? currentTheme.card : 'transparent',
+                    color: settings.mode === 'VLM' ? currentTheme.primary : currentTheme.textSecondary
+                  }}
+                >
+                  <Cpu size={18} />
+                  <span className="text-xs font-heading font-semibold">VLM</span>
+                </button>
+                <button
+                  onClick={() => setSettings({...settings, mode: 'OCR+LLM'})}
+                  className={`flex flex-col items-center gap-2 py-4 rounded-lg transition-all duration-200 ${
+                    settings.mode === 'OCR+LLM' ? 'shadow-soft' : 'hover:bg-white/50 dark:hover:bg-white/5'
+                  }`}
+                  style={{
+                    backgroundColor: settings.mode === 'OCR+LLM' ? currentTheme.card : 'transparent',
+                    color: settings.mode === 'OCR+LLM' ? currentTheme.primary : currentTheme.textSecondary
+                  }}
+                >
+                  <Search size={18} />
+                  <span className="text-xs font-heading font-semibold">OCR+LLM</span>
+                </button>
+                <button
+                  onClick={() => setSettings({...settings, mode: 'VLM+LLM'})}
+                  className={`flex flex-col items-center gap-2 py-4 rounded-lg transition-all duration-200 ${
+                    settings.mode === 'VLM+LLM' ? 'shadow-soft' : 'hover:bg-white/50 dark:hover:bg-white/5'
+                  }`}
+                  style={{
+                    backgroundColor: settings.mode === 'VLM+LLM' ? currentTheme.card : 'transparent',
+                    color: settings.mode === 'VLM+LLM' ? currentTheme.primary : currentTheme.textSecondary
+                  }}
+                >
+                  <Zap size={18} />
+                  <span className="text-xs font-heading font-semibold">VLM+LLM</span>
+                </button>
+              </div>
+            </section>
+
+            {/* VLM Configuration */}
+            {settings.mode === 'VLM' && (
+              <section className="space-y-3 animate-slide-up">
+                <div className="flex items-center gap-2 px-1">
+                  <ImageIcon size={14} style={{ color: currentTheme.primary }} />
+                  <h2 className="text-xs font-heading font-bold uppercase tracking-wider" style={{ color: currentTheme.textSecondary }}>视觉模型配置</h2>
+                </div>
+                <div className="rounded-2xl p-5 shadow-soft space-y-4 transition-all duration-200" style={{ backgroundColor: currentTheme.card }}>
+                   <div className="space-y-2">
+                     <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: currentTheme.textSecondary }}>API 提供商</label>
+                     <select
+                      value={settings.vlmProvider}
+                      onChange={(e) => setSettings({...settings, vlmProvider: e.target.value})}
+                      className="w-full h-10 px-3 rounded-lg text-sm font-medium transition-all duration-200 focus:ring-2 focus:ring-primary-500/20 outline-none"
+                      style={{ backgroundColor: currentTheme.inputBg, borderColor: currentTheme.inputBorder, color: currentTheme.text }}
+                     >
+                       <option value="ollama">Ollama (本地)</option>
+                       <option value="openai">OpenAI (GPT-4o)</option>
+                       <option value="anthropic">Anthropic (Claude 3.5)</option>
+                       <option value="custom">自定义端点</option>
+                     </select>
+                   </div>
+                   <div className="space-y-2">
+                     <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: currentTheme.textSecondary }}>Base URL</label>
+                     <input
+                      type="text"
+                      value={settings.vlmBaseUrl}
+                      onChange={(e) => setSettings({...settings, vlmBaseUrl: e.target.value})}
+                      className="w-full h-10 px-3 rounded-lg text-sm font-mono transition-all duration-200 focus:ring-2 focus:ring-primary-500/20 outline-none"
+                      style={{ backgroundColor: currentTheme.inputBg, borderColor: currentTheme.inputBorder, color: currentTheme.text }}
+                     />
+                   </div>
+                   <div className="space-y-2">
+                     <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: currentTheme.textSecondary }}>模型名称</label>
+                     <div className="flex gap-2">
+                       <input
+                        type="text"
+                        value={settings.vlmModel}
+                        onChange={(e) => setSettings({...settings, vlmModel: e.target.value})}
+                        placeholder="例如: qwen2-vl:7b"
+                        className="flex-1 h-10 px-3 rounded-lg text-sm font-medium transition-all duration-200 focus:ring-2 focus:ring-primary-500/20 outline-none"
+                        style={{ backgroundColor: currentTheme.inputBg, borderColor: currentTheme.inputBorder, color: currentTheme.text }}
+                       />
+                       <button
+                        onClick={() => handleTestConnection('vlm')}
+                        disabled={testStatus.vlm === 'testing'}
+                        className={`h-10 px-4 rounded-lg text-xs font-semibold transition-all duration-200 flex items-center gap-1.5 ${
+                          testStatus.vlm === 'testing' ? 'opacity-50 cursor-not-allowed' :
+                          testStatus.vlm === 'success' ? 'bg-success-500 text-white' :
+                          testStatus.vlm === 'error' ? 'bg-danger-500 text-white' :
+                          'bg-primary-600 text-white hover:bg-primary-700'
+                        }`}
+                       >
+                         {testStatus.vlm === 'testing' ? (
+                           <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                         ) : testStatus.vlm === 'success' ? (
+                           <CheckCircle size={14} />
+                         ) : testStatus.vlm === 'error' ? (
+                           <X size={14} />
+                         ) : (
+                           '测试'
+                         )}
+                       </button>
+                     </div>
+                     {testStatus.vlm !== 'idle' && testMessage.vlm && (
+                       <p className={`text-xs ${testStatus.vlm === 'success' ? 'text-success-600' : testStatus.vlm === 'error' ? 'text-danger-600' : 'text-slate-500'}`}>
+                         {testMessage.vlm}
+                       </p>
+                     )}
+                   </div>
+                   <div className="space-y-2">
+                     <label className="text-xs font-semibold uppercase tracking-wider flex justify-between" style={{ color: currentTheme.textSecondary }}>
+                       <span>API Key</span>
+                       <Key size={12} />
+                     </label>
+                     <div className="flex gap-2">
+                       <input
+                        type={showApiKeys.vlm ? 'text' : 'password'}
+                        value={settings.vlmApiKey}
+                        onChange={(e) => setSettings({...settings, vlmApiKey: e.target.value})}
+                        placeholder="sk-..."
+                        className="flex-1 h-10 px-3 rounded-lg text-sm font-mono transition-all duration-200 focus:ring-2 focus:ring-primary-500/20 outline-none"
+                        style={{ backgroundColor: currentTheme.inputBg, borderColor: currentTheme.inputBorder, color: currentTheme.text }}
+                       />
+                       <button
+                        onClick={() => setShowApiKeys(prev => ({ ...prev, vlm: !prev.vlm }))}
+                        className="h-10 px-3 rounded-lg text-slate-400 hover:bg-black/5 dark:hover:bg-white/10 transition-all duration-200"
+                        title="显示/隐藏密钥"
+                       >
+                        {showApiKeys.vlm ? <Eye size={16} /> : <EyeOff size={16} />}
+                       </button>
+                     </div>
+                   </div>
+                   <div className="space-y-2">
+                     <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: currentTheme.textSecondary }}>翻译提示词</label>
+                     <textarea
+                      value={settings.vlmTranslatePrompt}
+                      onChange={(e) => setSettings({...settings, vlmTranslatePrompt: e.target.value})}
+                      className="w-full px-3 py-2.5 rounded-lg text-sm transition-all duration-200 focus:ring-2 focus:ring-primary-500/20 outline-none resize-none"
+                      rows={3}
+                      placeholder="翻译提示词..."
+                      style={{ backgroundColor: currentTheme.inputBg, borderColor: currentTheme.inputBorder, color: currentTheme.text }}
+                     />
+                   </div>
+                   <div className="space-y-2">
+                     <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: currentTheme.textSecondary }}>解释提示词</label>
+                     <textarea
+                      value={settings.vlmExplainPrompt}
+                      onChange={(e) => setSettings({...settings, vlmExplainPrompt: e.target.value})}
+                      className="w-full px-3 py-2.5 rounded-lg text-sm transition-all duration-200 focus:ring-2 focus:ring-primary-500/20 outline-none resize-none"
+                      rows={3}
+                      placeholder="解释提示词..."
+                      style={{ backgroundColor: currentTheme.inputBg, borderColor: currentTheme.inputBorder, color: currentTheme.text }}
+                     />
+                   </div>
+                </div>
+              </section>
+            )}
+
+            {/* OCR+LLM Configuration */}
+            {settings.mode === 'OCR+LLM' && (
+              <section className="space-y-4 animate-slide-up">
+                <div className="flex items-center gap-2 px-1">
+                  <Server size={14} className="text-blue-500" />
+                  <h2 className="text-xs font-heading font-bold uppercase tracking-wider" style={{ color: currentTheme.textSecondary }}>模块化管道</h2>
+                </div>
+                <div className="rounded-2xl p-5 shadow-soft space-y-5 transition-all duration-200" style={{ backgroundColor: currentTheme.card }}>
+                   <div className="space-y-3">
+                     <div className="flex items-center justify-between">
+                       <p className="text-xs font-heading font-bold text-primary-600 bg-primary-50 px-2.5 py-1 rounded-lg inline-flex items-center gap-1.5">
+                         <span>1</span>
+                         <span>OCR 引擎</span>
+                       </p>
+                       <button onClick={() => toggleSection('ocr')} className="text-slate-400 hover:text-slate-600 transition-colors">
+                         {expandedSections.ocr ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                       </button>
+                     </div>
+                     {expandedSections.ocr && (
+                       <div className="space-y-3 pl-2">
+                        <select
+                          value={settings.ocrProvider}
+                          onChange={(e) => setSettings({...settings, ocrProvider: e.target.value})}
+                          className="w-full h-10 px-3 rounded-lg text-sm font-medium transition-all duration-200 focus:ring-2 focus:ring-primary-500/20 outline-none"
+                          style={{ backgroundColor: currentTheme.inputBg, borderColor: currentTheme.inputBorder, color: currentTheme.text }}
+                        >
+                          <option value="local">Tesseract (本地)</option>
+                          <option value="ollama">Ollama (视觉模型)</option>
+                          <option value="baidu">百度云</option>
+                          <option value="google">Google Vision</option>
+                          <option value="custom">自定义 (视觉)</option>
+                        </select>
+                        <div className="grid grid-cols-2 gap-2">
+                          <input
+                            type="text"
+                            value={settings.ocrBaseUrl}
+                            onChange={(e) => setSettings({...settings, ocrBaseUrl: e.target.value})}
+                            placeholder="Base URL"
+                            className="h-10 px-3 rounded-lg text-sm font-mono transition-all duration-200 focus:ring-2 focus:ring-primary-500/20 outline-none"
+                            style={{ backgroundColor: currentTheme.inputBg, borderColor: currentTheme.inputBorder, color: currentTheme.text }}
+                          />
+                          <input
+                            type="text"
+                            value={settings.ocrModel}
+                            onChange={(e) => setSettings({...settings, ocrModel: e.target.value})}
+                            placeholder="OCR 模型"
+                            className="h-10 px-3 rounded-lg text-sm font-medium transition-all duration-200 focus:ring-2 focus:ring-primary-500/20 outline-none"
+                            style={{ backgroundColor: currentTheme.inputBg, borderColor: currentTheme.inputBorder, color: currentTheme.text }}
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <input
+                            type={showApiKeys.ocr ? 'text' : 'password'}
+                            value={settings.ocrApiKey}
+                            onChange={(e) => setSettings({...settings, ocrApiKey: e.target.value})}
+                            placeholder="OCR API Key (如需要)"
+                            className="flex-1 h-10 px-3 rounded-lg text-sm font-mono transition-all duration-200 focus:ring-2 focus:ring-primary-500/20 outline-none"
+                            style={{ backgroundColor: currentTheme.inputBg, borderColor: currentTheme.inputBorder, color: currentTheme.text }}
+                          />
+                          <button
+                            onClick={() => setShowApiKeys(prev => ({ ...prev, ocr: !prev.ocr }))}
+                            className="h-10 px-3 rounded-lg text-slate-400 hover:bg-black/5 dark:hover:bg-white/10 transition-all duration-200"
+                            title="显示/隐藏密钥"
+                          >
+                            {showApiKeys.ocr ? <Eye size={16} /> : <EyeOff size={16} />}
+                          </button>
+                          <button
+                            onClick={() => handleTestConnection('ocr')}
+                            disabled={testStatus.ocr === 'testing'}
+                            className={`h-10 px-4 rounded-lg text-xs font-semibold transition-all duration-200 flex items-center gap-1.5 ${
+                              testStatus.ocr === 'testing' ? 'opacity-50 cursor-not-allowed' :
+                              testStatus.ocr === 'success' ? 'bg-success-500 text-white' :
+                              testStatus.ocr === 'error' ? 'bg-danger-500 text-white' :
+                              'bg-primary-600 text-white hover:bg-primary-700'
+                            }`}
+                          >
+                            {testStatus.ocr === 'testing' ? (
+                              <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                            ) : testStatus.ocr === 'success' ? (
+                              <CheckCircle size={14} />
+                            ) : testStatus.ocr === 'error' ? (
+                              <X size={14} />
+                            ) : (
+                              '测试'
+                            )}
+                          </button>
+                        </div>
+                        {testStatus.ocr !== 'idle' && testMessage.ocr && (
+                          <p className={`text-xs ${testStatus.ocr === 'success' ? 'text-success-600' : testStatus.ocr === 'error' ? 'text-danger-600' : 'text-slate-500'}`}>
+                            {testMessage.ocr}
+                          </p>
+                        )}
+                       </div>
+                     )}
+                   </div>
+
+                   <div className="space-y-3 border-t pt-5" style={{ borderColor: currentTheme.border }}>
+                     <div className="flex items-center justify-between">
+                       <p className="text-xs font-heading font-bold text-purple-600 bg-purple-50 px-2.5 py-1 rounded-lg inline-flex items-center gap-1.5">
+                         <span>2</span>
+                         <span>语言模型</span>
+                       </p>
+                       <button onClick={() => toggleSection('llm')} className="text-slate-400 hover:text-slate-600 transition-colors">
+                         {expandedSections.llm ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                       </button>
+                     </div>
+                     {expandedSections.llm && (
+                       <div className="space-y-3 pl-2">
+                        <select
+                          value={settings.llmProvider}
+                          onChange={(e) => setSettings({...settings, llmProvider: e.target.value})}
+                          className="w-full h-10 px-3 rounded-lg text-sm font-medium transition-all duration-200 focus:ring-2 focus:ring-primary-500/20 outline-none"
+                          style={{ backgroundColor: currentTheme.inputBg, borderColor: currentTheme.inputBorder, color: currentTheme.text }}
+                        >
+                          <option value="ollama">Ollama (本地)</option>
+                          <option value="openai">OpenAI</option>
+                          <option value="anthropic">Anthropic</option>
+                          <option value="custom">自定义端点</option>
+                        </select>
+                        <input
+                          type="text"
+                          value={settings.llmBaseUrl}
+                          onChange={(e) => setSettings({...settings, llmBaseUrl: e.target.value})}
+                          placeholder="LLM Base URL"
+                          className="w-full h-10 px-3 rounded-lg text-sm font-mono transition-all duration-200 focus:ring-2 focus:ring-primary-500/20 outline-none"
+                          style={{ backgroundColor: currentTheme.inputBg, borderColor: currentTheme.inputBorder, color: currentTheme.text }}
+                        />
+                        <div className="grid grid-cols-2 gap-2">
+                          <input
+                            type="text"
+                            value={settings.llmModel}
+                            onChange={(e) => setSettings({...settings, llmModel: e.target.value})}
+                            placeholder="模型名称 (例如: qwen2)"
+                            className="h-10 px-3 rounded-lg text-sm font-medium transition-all duration-200 focus:ring-2 focus:ring-primary-500/20 outline-none"
+                            style={{ backgroundColor: currentTheme.inputBg, borderColor: currentTheme.inputBorder, color: currentTheme.text }}
+                          />
+                          <div className="flex gap-1">
+                            <input
+                              type={showApiKeys.llm ? 'text' : 'password'}
+                              value={settings.llmApiKey}
+                              onChange={(e) => setSettings({...settings, llmApiKey: e.target.value})}
+                              placeholder="API Key"
+                              className="flex-1 h-10 px-3 rounded-lg text-sm font-mono transition-all duration-200 focus:ring-2 focus:ring-primary-500/20 outline-none"
+                              style={{ backgroundColor: currentTheme.inputBg, borderColor: currentTheme.inputBorder, color: currentTheme.text }}
+                            />
+                            <button
+                              onClick={() => setShowApiKeys(prev => ({ ...prev, llm: !prev.llm }))}
+                              className="h-10 px-3 rounded-lg text-slate-400 hover:bg-black/5 dark:hover:bg-white/10 transition-all duration-200"
+                              title="显示/隐藏密钥"
+                            >
+                              {showApiKeys.llm ? <Eye size={16} /> : <EyeOff size={16} />}
+                            </button>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleTestConnection('llm')}
+                          disabled={testStatus.llm === 'testing'}
+                          className={`w-full h-10 px-4 rounded-lg text-xs font-semibold transition-all duration-200 flex items-center justify-center gap-1.5 ${
+                            testStatus.llm === 'testing' ? 'opacity-50 cursor-not-allowed' :
+                            testStatus.llm === 'success' ? 'bg-success-500 text-white' :
+                            testStatus.llm === 'error' ? 'bg-danger-500 text-white' :
+                            'bg-primary-600 text-white hover:bg-primary-700'
+                          }`}
+                        >
+                          {testStatus.llm === 'testing' ? (
+                            <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                          ) : testStatus.llm === 'success' ? (
+                            <CheckCircle size={14} />
+                          ) : testStatus.llm === 'error' ? (
+                            <X size={14} />
+                          ) : (
+                            '测试 LLM 连接'
+                          )}
+                        </button>
+                        {testStatus.llm !== 'idle' && testMessage.llm && (
+                          <p className={`text-xs ${testStatus.llm === 'success' ? 'text-success-600' : testStatus.llm === 'error' ? 'text-danger-600' : 'text-slate-500'}`}>
+                            {testMessage.llm}
+                          </p>
+                        )}
+                       </div>
+                     )}
+                   </div>
+                </div>
+              </section>
+            )}
+
+            {/* VLM+LLM Configuration */}
+            {settings.mode === 'VLM+LLM' && (
+              <section className="space-y-4 animate-slide-up">
+                <div className="flex items-center gap-2 px-1">
+                  <Zap size={14} className="text-blue-500" />
+                  <h2 className="text-xs font-heading font-bold uppercase tracking-wider" style={{ color: currentTheme.textSecondary }}>混合管道</h2>
+                </div>
+                <div className="rounded-2xl p-5 shadow-soft space-y-5 transition-all duration-200" style={{ backgroundColor: currentTheme.card }}>
+                   <div className="space-y-3">
+                     <div className="flex items-center justify-between">
+                       <p className="text-xs font-heading font-bold text-primary-600 bg-primary-50 px-2.5 py-1 rounded-lg inline-flex items-center gap-1.5">
+                         <span>1</span>
+                         <span>视觉模型 (提取 JSON)</span>
+                       </p>
+                       <button onClick={() => toggleSection('vlm2')} className="text-slate-400 hover:text-slate-600 transition-colors">
+                         {expandedSections.vlm2 ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                       </button>
+                     </div>
+                     {expandedSections.vlm2 && (
+                       <div className="space-y-3 pl-2">
+                        <select
+                          value={settings.vlm2Provider}
+                          onChange={(e) => setSettings({...settings, vlm2Provider: e.target.value})}
+                          className="w-full h-10 px-3 rounded-lg text-sm font-medium transition-all duration-200 focus:ring-2 focus:ring-primary-500/20 outline-none"
+                          style={{ backgroundColor: currentTheme.inputBg, borderColor: currentTheme.inputBorder, color: currentTheme.text }}
+                        >
+                          <option value="ollama">Ollama (本地)</option>
+                          <option value="openai">OpenAI</option>
+                          <option value="anthropic">Anthropic</option>
+                          <option value="custom">自定义端点</option>
+                        </select>
+                        <input
+                          type="text"
+                          value={settings.vlm2BaseUrl}
+                          onChange={(e) => setSettings({...settings, vlm2BaseUrl: e.target.value})}
+                          placeholder="Base URL"
+                          className="w-full h-10 px-3 rounded-lg text-sm font-mono transition-all duration-200 focus:ring-2 focus:ring-primary-500/20 outline-none"
+                          style={{ backgroundColor: currentTheme.inputBg, borderColor: currentTheme.inputBorder, color: currentTheme.text }}
+                        />
+                        <div className="grid grid-cols-2 gap-2">
+                          <input
+                            type="text"
+                            value={settings.vlm2Model}
+                            onChange={(e) => setSettings({...settings, vlm2Model: e.target.value})}
+                            placeholder="模型名称"
+                            className="h-10 px-3 rounded-lg text-sm font-medium transition-all duration-200 focus:ring-2 focus:ring-primary-500/20 outline-none"
+                            style={{ backgroundColor: currentTheme.inputBg, borderColor: currentTheme.inputBorder, color: currentTheme.text }}
+                          />
+                          <div className="flex gap-1">
+                            <input
+                              type={showApiKeys.vlm2 ? 'text' : 'password'}
+                              value={settings.vlm2ApiKey}
+                              onChange={(e) => setSettings({...settings, vlm2ApiKey: e.target.value})}
+                              placeholder="API Key"
+                              className="flex-1 h-10 px-3 rounded-lg text-sm font-mono transition-all duration-200 focus:ring-2 focus:ring-primary-500/20 outline-none"
+                              style={{ backgroundColor: currentTheme.inputBg, borderColor: currentTheme.inputBorder, color: currentTheme.text }}
+                            />
+                            <button
+                              onClick={() => setShowApiKeys(prev => ({ ...prev, vlm2: !prev.vlm2 }))}
+                              className="h-10 px-3 rounded-lg text-slate-400 hover:bg-black/5 dark:hover:bg-white/10 transition-all duration-200"
+                              title="显示/隐藏密钥"
+                            >
+                              {showApiKeys.vlm2 ? <Eye size={16} /> : <EyeOff size={16} />}
+                            </button>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: currentTheme.textSecondary }}>JSON 转换提示词</label>
+                          <textarea
+                            value={settings.vlm2JsonPrompt}
+                            onChange={(e) => setSettings({...settings, vlm2JsonPrompt: e.target.value})}
+                            className="w-full px-3 py-2.5 rounded-lg text-sm transition-all duration-200 focus:ring-2 focus:ring-primary-500/20 outline-none resize-none"
+                            rows={4}
+                            placeholder="提示词：将图片转换为 JSON 格式"
+                            style={{ backgroundColor: currentTheme.inputBg, borderColor: currentTheme.inputBorder, color: currentTheme.text }}
+                          />
+                        </div>
+                        <button
+                          onClick={() => handleTestConnection('vlm2')}
+                          disabled={testStatus.vlm2 === 'testing'}
+                          className={`w-full h-10 px-4 rounded-lg text-xs font-semibold transition-all duration-200 flex items-center justify-center gap-1.5 ${
+                            testStatus.vlm2 === 'testing' ? 'opacity-50 cursor-not-allowed' :
+                            testStatus.vlm2 === 'success' ? 'bg-success-500 text-white' :
+                            testStatus.vlm2 === 'error' ? 'bg-danger-500 text-white' :
+                            'bg-primary-600 text-white hover:bg-primary-700'
+                          }`}
+                        >
+                          {testStatus.vlm2 === 'testing' ? (
+                            <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                          ) : testStatus.vlm2 === 'success' ? (
+                            <CheckCircle size={14} />
+                          ) : testStatus.vlm2 === 'error' ? (
+                            <X size={14} />
+                          ) : (
+                            '测试 VLM 连接'
+                          )}
+                        </button>
+                        {testStatus.vlm2 !== 'idle' && testMessage.vlm2 && (
+                          <p className={`text-xs ${testStatus.vlm2 === 'success' ? 'text-success-600' : testStatus.vlm2 === 'error' ? 'text-danger-600' : 'text-slate-500'}`}>
+                            {testMessage.vlm2}
+                          </p>
+                        )}
+                       </div>
+                     )}
+                   </div>
+
+                   <div className="space-y-3 border-t pt-5" style={{ borderColor: currentTheme.border }}>
+                     <div className="flex items-center justify-between">
+                       <p className="text-xs font-heading font-bold text-purple-600 bg-purple-50 px-2.5 py-1 rounded-lg inline-flex items-center gap-1.5">
+                         <span>2</span>
+                         <span>语言模型 (处理 JSON)</span>
+                       </p>
+                       <button onClick={() => toggleSection('llm2')} className="text-slate-400 hover:text-slate-600 transition-colors">
+                         {expandedSections.llm2 ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                       </button>
+                     </div>
+                     {expandedSections.llm2 && (
+                       <div className="space-y-3 pl-2">
+                        <select
+                          value={settings.llm2Provider}
+                          onChange={(e) => setSettings({...settings, llm2Provider: e.target.value})}
+                          className="w-full h-10 px-3 rounded-lg text-sm font-medium transition-all duration-200 focus:ring-2 focus:ring-primary-500/20 outline-none"
+                          style={{ backgroundColor: currentTheme.inputBg, borderColor: currentTheme.inputBorder, color: currentTheme.text }}
+                        >
+                          <option value="ollama">Ollama (本地)</option>
+                          <option value="openai">OpenAI</option>
+                          <option value="anthropic">Anthropic</option>
+                          <option value="custom">自定义端点</option>
+                        </select>
+                        <input
+                          type="text"
+                          value={settings.llm2BaseUrl}
+                          onChange={(e) => setSettings({...settings, llm2BaseUrl: e.target.value})}
+                          placeholder="LLM Base URL"
+                          className="w-full h-10 px-3 rounded-lg text-sm font-mono transition-all duration-200 focus:ring-2 focus:ring-primary-500/20 outline-none"
+                          style={{ backgroundColor: currentTheme.inputBg, borderColor: currentTheme.inputBorder, color: currentTheme.text }}
+                        />
+                        <div className="grid grid-cols-2 gap-2">
+                          <input
+                            type="text"
+                            value={settings.llm2Model}
+                            onChange={(e) => setSettings({...settings, llm2Model: e.target.value})}
+                            placeholder="模型名称"
+                            className="h-10 px-3 rounded-lg text-sm font-medium transition-all duration-200 focus:ring-2 focus:ring-primary-500/20 outline-none"
+                            style={{ backgroundColor: currentTheme.inputBg, borderColor: currentTheme.inputBorder, color: currentTheme.text }}
+                          />
+                          <div className="flex gap-1">
+                            <input
+                              type={showApiKeys.llm2 ? 'text' : 'password'}
+                              value={settings.llm2ApiKey}
+                              onChange={(e) => setSettings({...settings, llm2ApiKey: e.target.value})}
+                              placeholder="API Key"
+                              className="flex-1 h-10 px-3 rounded-lg text-sm font-mono transition-all duration-200 focus:ring-2 focus:ring-primary-500/20 outline-none"
+                              style={{ backgroundColor: currentTheme.inputBg, borderColor: currentTheme.inputBorder, color: currentTheme.text }}
+                            />
+                            <button
+                              onClick={() => setShowApiKeys(prev => ({ ...prev, llm2: !prev.llm2 }))}
+                              className="h-10 px-3 rounded-lg text-slate-400 hover:bg-black/5 dark:hover:bg-white/10 transition-all duration-200"
+                              title="显示/隐藏密钥"
+                            >
+                              {showApiKeys.llm2 ? <Eye size={16} /> : <EyeOff size={16} />}
+                            </button>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: currentTheme.textSecondary }}>翻译提示词</label>
+                          <textarea
+                            value={settings.llm2TranslatePrompt}
+                            onChange={(e) => setSettings({...settings, llm2TranslatePrompt: e.target.value})}
+                            className="w-full px-3 py-2.5 rounded-lg text-sm transition-all duration-200 focus:ring-2 focus:ring-primary-500/20 outline-none resize-none"
+                            rows={3}
+                            placeholder="提示词：翻译 JSON 内容"
+                            style={{ backgroundColor: currentTheme.inputBg, borderColor: currentTheme.inputBorder, color: currentTheme.text }}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: currentTheme.textSecondary }}>解释提示词</label>
+                          <textarea
+                            value={settings.llm2ExplainPrompt}
+                            onChange={(e) => setSettings({...settings, llm2ExplainPrompt: e.target.value})}
+                            className="w-full px-3 py-2.5 rounded-lg text-sm transition-all duration-200 focus:ring-2 focus:ring-primary-500/20 outline-none resize-none"
+                            rows={3}
+                            placeholder="提示词：解释 JSON 内容"
+                            style={{ backgroundColor: currentTheme.inputBg, borderColor: currentTheme.inputBorder, color: currentTheme.text }}
+                          />
+                        </div>
+                        <button
+                          onClick={() => handleTestConnection('llm2')}
+                          disabled={testStatus.llm2 === 'testing'}
+                          className={`w-full h-10 px-4 rounded-lg text-xs font-semibold transition-all duration-200 flex items-center justify-center gap-1.5 ${
+                            testStatus.llm2 === 'testing' ? 'opacity-50 cursor-not-allowed' :
+                            testStatus.llm2 === 'success' ? 'bg-success-500 text-white' :
+                            testStatus.llm2 === 'error' ? 'bg-danger-500 text-white' :
+                            'bg-primary-600 text-white hover:bg-primary-700'
+                          }`}
+                        >
+                          {testStatus.llm2 === 'testing' ? (
+                            <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                          ) : testStatus.llm2 === 'success' ? (
+                            <CheckCircle size={14} />
+                          ) : testStatus.llm2 === 'error' ? (
+                            <X size={14} />
+                          ) : (
+                            '测试 LLM 连接'
+                          )}
+                        </button>
+                        {testStatus.llm2 !== 'idle' && testMessage.llm2 && (
+                          <p className={`text-xs ${testStatus.llm2 === 'success' ? 'text-success-600' : testStatus.llm2 === 'error' ? 'text-danger-600' : 'text-slate-500'}`}>
+                            {testMessage.llm2}
+                          </p>
+                        )}
+                       </div>
+                     )}
+                   </div>
+                </div>
+              </section>
+            )}
+
+            {/* Model Name Validation Warning */}
+            <div className="rounded-xl p-4 space-y-2 transition-all duration-200" style={{ backgroundColor: hexToRgba(currentTheme.accent, 0.1), borderColor: hexToRgba(currentTheme.accent, 0.3) }}>
+              <div className="flex items-center gap-2">
+                <Zap size={14} style={{ color: currentTheme.accent }} />
+                <h3 className="text-xs font-heading font-bold uppercase tracking-wider" style={{ color: currentTheme.accent }}>模型名称规范</h3>
+              </div>
+              <ul className="text-xs space-y-1" style={{ color: currentTheme.text }}>
+                <li className="flex items-start gap-2">
+                  <span className="text-accent-400">•</span>
+                  <span>模型名称不能包含前后空格</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-accent-400">•</span>
+                  <span>只允许字母、数字、冒号、连字符、下划线、点和斜杠</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-accent-400">•</span>
+                  <span>示例：qwen2-vl:7b、deepseek-ai/DeepSeek-OCR</span>
+                </li>
+              </ul>
+            </div>
+
+            {/* Saved Configurations */}
+            <section className="space-y-3">
+              <div className="flex items-center justify-between px-1">
+                <div className="flex items-center gap-2">
+                  <Save size={14} style={{ color: currentTheme.primary }} />
+                  <h2 className="text-xs font-heading font-bold uppercase tracking-wider" style={{ color: currentTheme.textSecondary }}>保存的配置</h2>
+                </div>
+                <button
+                  onClick={() => setShowSavedConfigs(!showSavedConfigs)}
+                  className="text-xs font-semibold text-primary-600 hover:text-primary-700 transition-colors"
+                >
+                  {showSavedConfigs ? '隐藏' : '显示'}
+                </button>
+              </div>
+
+              {showSavedConfigs && (
+                <div className="space-y-3 animate-fade-in">
+                  <div className="rounded-xl p-4 shadow-soft space-y-3 transition-all duration-200" style={{ backgroundColor: currentTheme.card }}>
+                    <input
+                      type="text"
+                      value={configName}
+                      onChange={(e) => setConfigName(e.target.value)}
+                      placeholder="配置名称 (例如: 硅基流动 OCR)"
+                      className="w-full h-10 px-3 rounded-lg text-sm font-medium transition-all duration-200 focus:ring-2 focus:ring-primary-500/20 outline-none"
+                      style={{ backgroundColor: currentTheme.inputBg, borderColor: currentTheme.inputBorder, color: currentTheme.text }}
+                    />
+
+                    <div className="space-y-3">
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold" style={{ color: currentTheme.textSecondary }}>API 格式标签</p>
+                        <div className="flex flex-wrap gap-2">
+                          {apiFormatTags.map(tag => (
+                            <button
+                              key={tag}
+                              onClick={() => configTags.includes(tag) ? handleRemoveTag(tag) : handleAddTag(tag)}
+                              className={`text-xs px-3 py-1.5 rounded-lg border transition-all duration-200 ${
+                                configTags.includes(tag)
+                                  ? 'bg-primary-600 text-white border-primary-600'
+                                  : 'bg-white dark:bg-slate-800 text-slate-600 border-slate-200 hover:border-primary-300'
+                              }`}
+                            >
+                              {tag}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold" style={{ color: currentTheme.textSecondary }}>模型类型标签</p>
+                        <div className="flex flex-wrap gap-2">
+                          {modelTypeTags.map(tag => (
+                            <button
+                              key={tag}
+                              onClick={() => configTags.includes(tag) ? handleRemoveTag(tag) : handleAddTag(tag)}
+                              className={`text-xs px-3 py-1.5 rounded-lg border transition-all duration-200 ${
+                                configTags.includes(tag)
+                                  ? 'bg-success-600 text-white border-success-600'
+                                  : 'bg-white dark:bg-slate-800 text-slate-600 border-slate-200 hover:border-success-300'
+                              }`}
+                            >
+                              {tag}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold" style={{ color: currentTheme.textSecondary }}>自定义标签</p>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={customTagInput}
+                            onChange={(e) => setCustomTagInput(e.target.value)}
+                            onKeyPress={(e) => e.key === 'Enter' && handleAddCustomTag()}
+                            placeholder="输入自定义标签"
+                            className="flex-1 h-10 px-3 rounded-lg text-sm font-medium transition-all duration-200 focus:ring-2 focus:ring-primary-500/20 outline-none"
+                            style={{ backgroundColor: currentTheme.inputBg, borderColor: currentTheme.inputBorder, color: currentTheme.text }}
+                          />
+                          <button
+                            onClick={handleAddCustomTag}
+                            className="h-10 px-4 rounded-lg text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all duration-200"
+                          >
+                            添加
+                          </button>
+                        </div>
+                        {configTags.filter(t => !apiFormatTags.includes(t) && !modelTypeTags.includes(t)).length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            {configTags.filter(t => !apiFormatTags.includes(t) && !modelTypeTags.includes(t)).map(tag => (
+                              <span
+                                key={tag}
+                                className="text-xs px-3 py-1.5 bg-blue-100 text-blue-600 rounded-lg flex items-center gap-1.5 transition-all duration-200"
+                              >
+                                {tag}
+                                <button
+                                  onClick={() => handleRemoveTag(tag)}
+                                  className="hover:text-blue-800 transition-colors"
+                                >
+                                  <X size={12} />
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={handleSaveConfiguration}
+                      disabled={!configName.trim()}
+                      className="w-full h-10 px-4 rounded-lg text-xs font-semibold bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                    >
+                      保存当前配置
+                    </button>
+                  </div>
+
+                  {savedConfigurations.length > 0 ? (
+                    <div className="space-y-2">
+                      {['VLM', 'OCR+LLM', 'VLM+LLM'].map(pipeline => {
+                        const pipelineConfigs = savedConfigurations.filter(c => c.pipeline === pipeline)
+                        if (pipelineConfigs.length === 0) return null
+
+                        return (
+                          <div key={pipeline} className="rounded-xl p-4 shadow-soft transition-all duration-200" style={{ backgroundColor: currentTheme.card }}>
+                            <p className="text-xs font-heading font-bold text-primary-600 bg-primary-50 px-2.5 py-1 rounded-lg inline-flex mb-3">
+                              管道{pipeline === 'VLM' ? 'A' : pipeline === 'OCR+LLM' ? 'B' : 'C'}
+                            </p>
+                            <div className="space-y-2">
+                              {pipelineConfigs.map(config => (
+                                <div
+                                  key={config.id}
+                                  className="flex items-center justify-between p-3 rounded-lg transition-all duration-200 hover:bg-black/5 dark:hover:bg-white/5"
+                                  style={{ backgroundColor: currentTheme.inputBg }}
+                                >
+                                  <div className="flex-1">
+                                    <p className="text-sm font-semibold mb-1" style={{ color: currentTheme.text }}>{config.name}</p>
+                                    {config.tags && config.tags.length > 0 && (
+                                      <div className="flex flex-wrap gap-1.5">
+                                        {config.tags.map((tag: string) => (
+                                          <span
+                                            key={tag}
+                                            className={`text-[10px] px-2 py-0.5 rounded-md ${
+                                              apiFormatTags.includes(tag)
+                                                ? 'bg-purple-100 text-purple-600'
+                                                : modelTypeTags.includes(tag)
+                                                  ? 'bg-green-100 text-green-600'
+                                                  : 'bg-blue-100 text-blue-600'
+                                            }`}
+                                          >
+                                            {tag}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    )}
+                                    <div className="flex gap-1.5 mt-1">
+                                      {config.pipeline === 'VLM' && config.config.vlmProvider && (
+                                        <span className="text-[10px] px-2 py-0.5 bg-purple-100 text-purple-600 rounded-md">
+                                          {getApiFormatLabel(config.config.vlmProvider)}
+                                        </span>
+                                      )}
+                                      {config.pipeline === 'OCR+LLM' && (
+                                        <>
+                                          {config.config.ocrProvider && (
+                                            <span className="text-[10px] px-2 py-0.5 bg-green-100 text-green-600 rounded-md">
+                                              {getApiFormatLabel(config.config.ocrProvider)}
+                                            </span>
+                                          )}
+                                          {config.config.llmProvider && (
+                                            <span className="text-[10px] px-2 py-0.5 bg-orange-100 text-orange-600 rounded-md">
+                                              {getApiFormatLabel(config.config.llmProvider)}
+                                            </span>
+                                          )}
+                                        </>
+                                      )}
+                                      {config.pipeline === 'VLM+LLM' && (
+                                        <>
+                                          {config.config.vlm2Provider && (
+                                            <span className="text-[10px] px-2 py-0.5 bg-purple-100 text-purple-600 rounded-md">
+                                              {getApiFormatLabel(config.config.vlm2Provider)}
+                                            </span>
+                                          )}
+                                          {config.config.llm2Provider && (
+                                            <span className="text-[10px] px-2 py-0.5 bg-pink-100 text-pink-600 rounded-md">
+                                              {getApiFormatLabel(config.config.llm2Provider)}
+                                            </span>
+                                          )}
+                                        </>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="flex gap-1.5">
+                                    <button
+                                      onClick={() => handleLoadConfiguration(config)}
+                                      className="h-8 px-3 rounded-lg text-xs font-semibold bg-primary-600 text-white hover:bg-primary-700 transition-all duration-200"
+                                    >
+                                      应用
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteConfiguration(config.id)}
+                                      className="h-8 px-3 rounded-lg text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all duration-200"
+                                    >
+                                      删除
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-center py-6" style={{ color: currentTheme.textMuted }}>暂无保存的配置</p>
+                  )}
+                </div>
+              )}
+            </section>
+
+            {/* Features */}
+            <section className="space-y-3">
+              <div className="flex items-center gap-2 px-1">
+                <Zap size={14} style={{ color: currentTheme.accent }} />
+                <h2 className="text-xs font-heading font-bold uppercase tracking-wider" style={{ color: currentTheme.textSecondary }}>功能设置</h2>
+              </div>
+              <div className="rounded-xl p-4 shadow-soft space-y-4 transition-all duration-200" style={{ backgroundColor: currentTheme.card }}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold" style={{ color: currentTheme.text }}>划词翻译</p>
+                      <p className="text-xs" style={{ color: currentTheme.textSecondary }}>选中文字自动翻译</p>
+                  </div>
+                  <button
+                    onClick={() => setSettings({...settings, enableTextSelection: !settings.enableTextSelection})}
+                    className={`w-12 h-6 rounded-full transition-all duration-200 ${
+                      settings.enableTextSelection ? 'bg-primary-600' : 'bg-slate-200'
+                    }`}
+                  >
+                    <div className={`w-5 h-5 bg-white rounded-full shadow-soft transition-all duration-200 ${settings.enableTextSelection ? 'translate-x-6' : 'translate-x-0.5'}`} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="rounded-xl p-4 shadow-soft space-y-4 transition-all duration-200" style={{ backgroundColor: currentTheme.card }}>
+                <div className="flex items-center gap-2 mb-3">
+                  <Palette size={14} style={{ color: currentTheme.primary }} />
+                  <h2 className="text-xs font-heading font-bold uppercase tracking-wider" style={{ color: currentTheme.textSecondary }}>外观设置</h2>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-xs font-semibold mb-2" style={{ color: currentTheme.text }}>主题</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {Object.entries(themes).map(([key, theme]) => (
+                        <button
+                          key={key}
+                          onClick={() => setSettings({...settings, theme: key as any})}
+                          className={`flex items-center gap-2.5 px-4 py-3 rounded-xl text-xs font-semibold transition-all duration-200 ${
+                            settings.theme === key
+                              ? 'ring-2 ring-primary-500 scale-105'
+                              : 'hover:bg-white/50 dark:hover:bg-white/5'
+                          }`}
+                          style={{
+                            backgroundColor: settings.theme === key ? theme.card : theme.background,
+                            color: theme.text,
+                            border: `1px solid ${theme.border}`
+                          }}
+                        >
+                          <div
+                            className="w-4 h-4 rounded-full shadow-soft"
+                            style={{ backgroundColor: theme.primary }}
+                          />
+                          {settings.language === 'zh' ? theme.name : theme.nameEn}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold mb-2" style={{ color: currentTheme.text }}>语言</p>
+                    <div className="flex gap-2">
+                      {['zh', 'en'].map((lang) => (
+                        <button
+                          key={lang}
+                          onClick={() => setSettings({...settings, language: lang as any})}
+                          className={`flex-1 px-4 py-3 rounded-xl text-xs font-semibold transition-all duration-200 ${
+                            settings.language === lang
+                              ? 'bg-primary-600 text-white ring-2 ring-primary-300'
+                              : 'bg-white dark:bg-slate-800 hover:bg-primary-50 dark:hover:bg-primary-50'
+                          }`}
+                        >
+                          {lang === 'zh' ? '中文' : 'English'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* Save Button */}
+            <button
+              onClick={handleSaveSettings}
+              disabled={saveStatus !== 'idle'}
+              className="w-full h-12 rounded-xl text-xs font-heading font-semibold text-white transition-all duration-200 flex items-center justify-center gap-2 shadow-soft-lg active:scale-98 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{
+                backgroundColor: currentTheme.primary,
+                boxShadow: `0 4px 20px ${hexToRgba(currentTheme.primary, 0.4)}`
+              }}
+            >
+              {saveStatus === 'idle' ? <Save size={16} /> : saveStatus === 'saving' ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : <CheckCircle size={16} />}
+              {saveStatus === 'idle' ? '保存配置' : saveStatus === 'saving' ? '保存中...' : '已保存'}
+            </button>
+          </div>
+        )}
+      </main>
+
+      {/* Footer */}
+      <footer className="h-10 border-t flex items-center justify-center shrink-0 transition-colors duration-200" style={{ backgroundColor: currentTheme.card, borderColor: currentTheme.border }}>
+        <div className="flex gap-4 items-center" style={{ opacity: 0.3 }}>
+           <Cpu size={12} />
+           <Globe size={12} />
+           <Key size={12} />
+        </div>
+      </footer>
+    </div>
+  )
+}
+
+export default App

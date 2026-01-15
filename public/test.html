@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VisionBridge Test</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            max-width: 400px;
+            text-align: center;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        p {
+            color: #666;
+            margin: 10px 0;
+        }
+        .status {
+            background: #e7f3ff;
+            border-left: 4px solid #2196F3;
+            padding: 15px;
+            margin: 20px 0;
+            text-align: left;
+        }
+        .success {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎉 Vision Bridge</h1>
+        <p>APK测试页面</p>
+        
+        <div class="status">
+            <p><strong>状态：</strong><span class="success">✓ 正常运行</span></p>
+            <p><strong>平台：</strong><span id="platform">检测中...</span></p>
+            <p><strong>时间：</strong><span id="time"></span></p>
+        </div>
+        
+        <p>如果您看到这个页面，说明APK已经成功安装并运行！</p>
+    </div>
+
+    <script>
+        // 显示平台信息
+        document.getElementById('platform').textContent = 'Android';
+        
+        // 显示当前时间
+        setInterval(() => {
+            document.getElementById('time').textContent = new Date().toLocaleTimeString('zh-CN');
+        }, 1000);
+        
+        // 添加点击事件
+        document.body.addEventListener('click', () => {
+            alert('点击测试成功！');
+        });
+    </script>
+</body>
+</html>

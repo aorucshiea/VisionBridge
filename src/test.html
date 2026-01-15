@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vision Bridge - 测试页面</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            margin: 0;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            text-align: center;
+        }
+        h1 {
+            font-size: 2em;
+            margin-bottom: 20px;
+        }
+        .status {
+            background: rgba(255,255,255,0.2);
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        .success {
+            color: #4ade80;
+            font-size: 1.2em;
+        }
+        .info {
+            margin: 10px 0;
+            font-size: 0.9em;
+        }
+        button {
+            background: white;
+            color: #667eea;
+            border: none;
+            padding: 15px 30px;
+            font-size: 1.1em;
+            border-radius: 25px;
+            cursor: pointer;
+            margin-top: 20px;
+            font-weight: bold;
+        }
+        button:hover {
+            transform: scale(1.05);
+            transition: transform 0.2s;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎉 Vision Bridge</h1>
+        <div class="status">
+            <div class="success">✅ 应用加载成功！</div>
+            <div class="info">平台: <span id="platform">检测中...</span></div>
+            <div class="info">时间: <span id="time"></span></div>
+        </div>
+        <p>如果您能看到这个页面，说明APK构建成功！</p>
+        <button onclick="location.href='index.html'">进入主应用</button>
+    </div>
+
+    <script>
+        // 检测平台
+        const platform = navigator.userAgent.includes('Android') ? 'Android' :
+                        navigator.userAgent.includes('iOS') ? 'iOS' : 'Web';
+        document.getElementById('platform').textContent = platform;
+
+        // 显示当前时间
+        function updateTime() {
+            document.getElementById('time').textContent = new Date().toLocaleString('zh-CN');
+        }
+        updateTime();
+        setInterval(updateTime, 1000);
+
+        // 控制台输出
+        console.log('Vision Bridge 测试页面加载成功');
+        console.log('平台:', platform);
+    </script>
+</body>
+</html>
