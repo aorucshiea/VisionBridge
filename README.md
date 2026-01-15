@@ -44,6 +44,9 @@ You can use these free AI model providers with VisionBridge:
 | **iflow** ⭐ | ~2000 API calls/day, includes GLM-4.6, Qwen3, DeepSeek |
 | **NVIDIA NIM** ⭐ | 1000-5000 credits for development, includes GLM-4.7, MiniMax-M2.1 |
 | **anigravity** ⭐ | Weekly free quota for Gemini and Claude latest models |
+| **ModelScope (魔塔)** ⭐ | 2000 free calls/day, 500 per model, covers Qwen, DeepSeek, GLM |
+| **Free Qwen3** 🆓 | Completely free, no registration required |
+| **Free QwQ-32B** 🆓 | Completely free, no registration, unlimited calls |
 
 **More Options:**
 
