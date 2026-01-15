@@ -37,18 +37,17 @@ The tool has three built-in "pipelines" for processing images, suitable for diff
 
 You can use these free AI model providers with VisionBridge:
 
-| Provider | Description | Notes |
-|----------|-------------|-------|
-| **iflow** ⭐ | Recommended free model provider | Easy to use, good performance |
-| **NVIDIA NIM** ⭐ | Recommended free model provider | High quality models from NVIDIA |
-| **SiliconFlow** | Free models available without deposit | Get commission by inviting new users to access all paid models without deposit |
-| **OpenRouter** | Generous daily free calls | Aggregates many models with free tier |
-| **ModelScope (魔塔)** | Similar to OpenRouter | Chinese platform with free models |
-| **Cherry Studio** | Many free models available | Requires small deposit to activate free features, speed may vary |
-| **anigravity** ⭐ | Weekly free quota for Gemini and Claude latest models | Decent speed, requires VPN. Can use anigravity tool for enhanced efficiency |
-| **opencode zen** | Curated selection of quality models (GLM4.7, MiniMax2.1) | Not recommended - requires large quota to activate. Free models available via CLI without activation but very slow |
+**Recommended:**
 
-*More providers welcome! Feel free to submit your recommendations.*
+| Provider | Description |
+|----------|-------------|
+| **iflow** ⭐ | ~2000 API calls/day, includes GLM-4.6, Qwen3, DeepSeek |
+| **NVIDIA NIM** ⭐ | 1000-5000 credits for development, includes GLM-4.7, MiniMax-M2.1 |
+| **anigravity** ⭐ | Weekly free quota for Gemini and Claude latest models |
+
+**More Options:**
+
+For a comprehensive list of all free AI model providers (including official platforms, aggregation services, and special APIs), see [FREE_MODELS.md](FREE_MODELS.md).
 
 ### How is it technically implemented?
 
@@ -121,18 +120,17 @@ I created this tool originally to solve the trouble of reading foreign language 
 
 你可以使用以下免费大模型供应商：
 
-| 供应商 | 描述 | 说明 |
-|--------|------|------|
-| **iflow** ⭐ | 推荐的免费模型供应商 | 易于使用，性能良好 |
-| **NVIDIA NIM** ⭐ | 推荐的免费模型供应商 | NVIDIA 提供的高质量模型 |
-| **SiliconFlow (硅基流动)** | 无需充值即可使用部分免费模型 | 通过邀请新用户可获得佣金，无需充值即可使用所有付费大模型 |
-| **OpenRouter** | 每天提供足量免费调用 | 聚合多种模型，有免费额度 |
-| **ModelScope (魔塔)** | 与 OpenRouter 类似 | 国内平台，提供免费模型 |
-| **Cherry Studio** | 有非常多各种各样免费大模型 | 需要先充值最小数额激活免费功能，速度可能稍慢 |
-| **anigravity** ⭐ | 每周可免费使用一定额度的 Gemini 和 Claude 最新模型 | 速度还可以，但需要魔法。可使用 anigravity tool 工具增强效率 |
-| **opencode zen** | 精选高质量模型（GLM4.7、MiniMax2.1） | 不推荐 - 需要很多额度激活免费模型。在 opencode cli 中可无需激活使用免费模型，但速度极慢 |
+**推荐使用：**
 
-*更多供应商欢迎投稿！*
+| 供应商 | 描述 |
+|--------|------|
+| **iflow** ⭐ | 每天约 2000 次 API 调用，包含 GLM-4.6、Qwen3、DeepSeek |
+| **NVIDIA NIM** ⭐ | 1000-5000 credits 用于开发，包含 GLM-4.7、MiniMax-M2.1 |
+| **anigravity** ⭐ | 每周可免费使用一定额度的 Gemini 和 Claude 最新模型 |
+
+**更多选择：**
+
+查看 [FREE_MODELS.md](FREE_MODELS.md) 获取完整的免费大模型供应商列表（包括官方平台、聚合服务和特殊 API）。
 
 ## 从源码安装
 
