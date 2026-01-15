@@ -30,8 +30,23 @@ The tool has three built-in "pipelines" for processing images, suitable for diff
 
 1.  **Download**: Download the latest installation package from [release](https://github.com/aorucshiea/VisionBridge/releases).
 2.  **Install**: Run the installer just like any other software.
-3.  **Configure (Optional)**: If you want to use your own AI API (like OpenAI, DeepSeek, Zhipu, or some free models like iflow, nvidia nim), you can fill them in the settings.
+3.  **Configure (Optional)**: If you want to use your own AI API, you can fill them in the settings. See [Free AI Model Providers](#free-ai-model-providers) below for recommended options.
 4.  **Use**: Press the default `Alt+A` (configurable) to take a screenshot, select an area, and the result will appear in a floating window next to it.
+
+### Free AI Model Providers
+
+You can use these free AI model providers with VisionBridge:
+
+| Provider | Description | Notes |
+|----------|-------------|-------|
+| **iflow** ⭐ | Recommended free model provider | Easy to use, good performance |
+| **NVIDIA NIM** ⭐ | Recommended free model provider | High quality models from NVIDIA |
+| **SiliconFlow** | Free models available without deposit | Get commission by inviting new users to access all paid models without deposit |
+| **OpenRouter** | Generous daily free calls | Aggregates many models with free tier |
+| **ModelScope (魔塔)** | Similar to OpenRouter | Chinese platform with free models |
+| **Cherry Studio** | Many free models available | Requires small deposit to activate free features, speed may vary |
+
+*More providers welcome! Feel free to submit your recommendations.*
 
 ### How is it technically implemented?
 
@@ -43,7 +58,7 @@ You can freely configure which AI service to use at each step (cloud API or loca
 
 ### FAQ
 
-*   **Is it free?** The tool itself is free. But if you use paid third-party AI APIs (like GPT-4), you'll incur the corresponding costs.
+*   **Is it free?** The tool itself is free. But if you use paid third-party AI APIs (like GPT-4), you'll incur the corresponding costs. However, there are many free model providers available (see above).
 *   **Is my screenshot data secure?** If you configure cloud AI services, images will be sent to the corresponding service provider. If you use local models exclusively, your data stays entirely on your computer.
 *   **Why is the installation package a bit large?** Because it includes some necessary runtime environments and basic local processing models to ensure some functionality works even without an internet connection.
 
@@ -97,8 +112,23 @@ I created this tool originally to solve the trouble of reading foreign language 
 ## 怎么开始用？
 1.  **下载**：从 [release](https://github.com/aorucshiea/VisionBridge/releases) 下载最新的安装包。
 2.  **安装**：和安装其他软件一样，运行安装程序。
-3.  **配置（可选）**：如果需要使用自己的AI API（比如OpenAI、DeepSeek、智谱，一些免费模型比如iflow，nvidia nim），可以在设置里填写。
+3.  **配置（可选）**：如果需要使用自己的AI API，可以在设置里填写。推荐使用下方的[免费大模型供应商](#免费大模型供应商)。
 4.  **使用**：按下默认的 `Alt+A`（可修改）截图，选择区域后，结果会显示在旁边的浮动窗口里。
+
+## 免费大模型供应商
+
+你可以使用以下免费大模型供应商：
+
+| 供应商 | 描述 | 说明 |
+|--------|------|------|
+| **iflow** ⭐ | 推荐的免费模型供应商 | 易于使用，性能良好 |
+| **NVIDIA NIM** ⭐ | 推荐的免费模型供应商 | NVIDIA 提供的高质量模型 |
+| **SiliconFlow (硅基流动)** | 无需充值即可使用部分免费模型 | 通过邀请新用户可获得佣金，无需充值即可使用所有付费大模型 |
+| **OpenRouter** | 每天提供足量免费调用 | 聚合多种模型，有免费额度 |
+| **ModelScope (魔塔)** | 与 OpenRouter 类似 | 国内平台，提供免费模型 |
+| **Cherry Studio** | 有非常多各种各样免费大模型 | 需要先充值最小数额激活免费功能，速度可能稍慢 |
+
+*更多供应商欢迎投稿！*
 
 ## 从源码安装
 
@@ -126,7 +156,7 @@ npm run dev
 你可以自由配置各环节使用哪个AI服务（云端API或本地模型）。
 
 ## 常见问题
-*   **收费吗？** 工具本身免费。但如果你使用需要付费的第三方AI API（如GPT-4），会产生相应费用。
+*   **收费吗？** 工具本身免费。但如果你使用需要付费的第三方AI API（如GPT-4），会产生相应费用。不过有很多免费模型供应商可供选择（见上方）。
 *   **我的截图隐私安全吗？** 如果你配置的是云端AI服务，图片会被发送到对应的服务商。如果全部使用本地模型，则数据完全留在你电脑上。
 *   **为什么安装包有点大？** 因为内置了一些必要的运行环境和基础的本地处理模型，以保证在没有网络时也能使用部分功能。
 
