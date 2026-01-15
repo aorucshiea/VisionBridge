@@ -45,6 +45,8 @@ You can use these free AI model providers with VisionBridge:
 | **OpenRouter** | Generous daily free calls | Aggregates many models with free tier |
 | **ModelScope (魔塔)** | Similar to OpenRouter | Chinese platform with free models |
 | **Cherry Studio** | Many free models available | Requires small deposit to activate free features, speed may vary |
+| **anigravity** ⭐ | Weekly free quota for Gemini and Claude latest models | Decent speed, requires VPN. Can use anigravity tool for enhanced efficiency |
+| **opencode zen** | Curated selection of quality models (GLM4.7, MiniMax2.1) | Not recommended - requires large quota to activate. Free models available via CLI without activation but very slow |
 
 *More providers welcome! Feel free to submit your recommendations.*
 
@@ -127,6 +129,8 @@ I created this tool originally to solve the trouble of reading foreign language 
 | **OpenRouter** | 每天提供足量免费调用 | 聚合多种模型，有免费额度 |
 | **ModelScope (魔塔)** | 与 OpenRouter 类似 | 国内平台，提供免费模型 |
 | **Cherry Studio** | 有非常多各种各样免费大模型 | 需要先充值最小数额激活免费功能，速度可能稍慢 |
+| **anigravity** ⭐ | 每周可免费使用一定额度的 Gemini 和 Claude 最新模型 | 速度还可以，但需要魔法。可使用 anigravity tool 工具增强效率 |
+| **opencode zen** | 精选高质量模型（GLM4.7、MiniMax2.1） | 不推荐 - 需要很多额度激活免费模型。在 opencode cli 中可无需激活使用免费模型，但速度极慢 |
 
 *更多供应商欢迎投稿！*
 
