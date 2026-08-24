@@ -2,6 +2,7 @@ import { ipcMain } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
 import { app } from 'electron'
+import { DEFAULT_SETTINGS } from '../src/lib/defaults'
 
 const SETTINGS_PATH = path.join(app.getPath('userData'), 'settings.json')
 
@@ -88,59 +89,32 @@ export interface SavedConfiguration {
   }
 }
 
-const defaultSettings: AppSettings = {
-  vlmProvider: 'ollama',
-  vlmModel: 'deepseek-ocr:3b',  // Only working vision model
-  vlmApiKey: '',
-  vlmBaseUrl: 'http://127.0.0.1:11434',
-  vlmTranslatePrompt: 'Translate the text in the image to natural, fluent Chinese. Output ONLY the translated text, nothing else.',
-  vlmExplainPrompt: 'Analyze the image and explain the content in detail in Chinese. Output ONLY the explanation, nothing else.',
-  mode: 'VLM',
-  ocrProvider: 'ollama',  // Changed from 'local' to 'ollama'
-  ocrApiKey: '',
-  ocrBaseUrl: 'http://127.0.0.1:11434',
-  ocrModel: 'deepseek-ocr:3b',
-  llmProvider: 'ollama',
-  llmModel: 'rnj-1:8b-instruct-q8_0',
-  llmApiKey: '',
-  llmBaseUrl: 'http://127.0.0.1:11434',
-  llmTranslatePrompt: 'Translate the following text to Chinese. Output ONLY the translation, nothing else.',
-  llmExplainPrompt: 'Explain the following text in detail in Chinese. Output ONLY the explanation, nothing else.',
-  vlm2Provider: 'ollama',
-  vlm2Model: 'qwen2-vl:7b',
-  vlm2ApiKey: '',
-  vlm2BaseUrl: 'http://127.0.0.1:11434',
-  vlm2JsonPrompt: '将以下图片转换为结构化的JSON格式。请提取图片中的所有关键信息，包括：\n1. 主要对象和元素\n2. 文字内容（如果有）\n3. 颜色和布局\n4. 任何其他重要细节\n\n输出格式：\n{\n  "main_objects": [],\n  "text_content": "",\n  "colors": [],\n  "layout": "",\n  "other_details": ""\n}',
-  llm2Provider: 'ollama',
-  llm2Model: 'qwen2:7b',
-  llm2ApiKey: '',
-  llm2BaseUrl: 'http://127.0.0.1:11434',
-  llm2TranslatePrompt: '图片描述：\n{json_data}\n\n请根据以上图片描述进行翻译。直接输出翻译结果，不要说冗余的话。',
-  llm2ExplainPrompt: '图片描述：\n{json_data}\n\n请根据以上图片描述进行详细解释。直接输出解释内容，不要说冗余的话。',
-  enableTextSelection: false,
-  trayIconPath: '',
-  savedConfigurations: [],
-  showCloseConfirm: true,
-  theme: 'light',
-  language: 'zh'
+const defaultSettings: AppSettings = DEFAULT_SETTINGS
+
+function ensureSettingsFile(): void {
+  const dir = path.dirname(SETTINGS_PATH)
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+  if (!fs.existsSync(SETTINGS_PATH)) {
+    fs.writeFileSync(SETTINGS_PATH, JSON.stringify(defaultSettings, null, 2))
+  }
+}
+
+/** Atomic write: write to a temp file first, then rename to avoid corruption. */
+export function writeSettings(settings: AppSettings): void {
+  ensureSettingsFile()
+  const tmpPath = `${SETTINGS_PATH}.tmp`
+  fs.writeFileSync(tmpPath, JSON.stringify(settings, null, 2))
+  fs.renameSync(tmpPath, SETTINGS_PATH)
 }
 
 export function initSettings() {
-  ipcMain.handle('get-settings', () => {
-    if (fs.existsSync(SETTINGS_PATH)) {
-      try {
-        const data = fs.readFileSync(SETTINGS_PATH, 'utf-8')
-        return { ...defaultSettings, ...JSON.parse(data) }
-      } catch (e) {
-        return defaultSettings
-      }
-    }
-    return defaultSettings
-  })
+  ensureSettingsFile()
 
-  ipcMain.handle('save-settings', (_, settings: AppSettings) => {
+  ipcMain.handle('get-settings', () => getSettings())
+
+  ipcMain.handle('save-settings', (_e, settings: AppSettings) => {
     try {
-      fs.writeFileSync(SETTINGS_PATH, JSON.stringify(settings, null, 2))
+      writeSettings({ ...defaultSettings, ...settings })
       return { success: true }
     } catch (e: any) {
       return { success: false, error: e?.message || 'Unknown error' }
@@ -149,13 +123,11 @@ export function initSettings() {
 }
 
 export function getSettings(): AppSettings {
-  if (fs.existsSync(SETTINGS_PATH)) {
-    try {
-      const data = fs.readFileSync(SETTINGS_PATH, 'utf-8')
-      return { ...defaultSettings, ...JSON.parse(data) }
-    } catch (e) {
-      return defaultSettings
-    }
+  ensureSettingsFile()
+  try {
+    const data = fs.readFileSync(SETTINGS_PATH, 'utf-8')
+    return { ...defaultSettings, ...JSON.parse(data) }
+  } catch (e) {
+    return defaultSettings
   }
-  return defaultSettings
 }

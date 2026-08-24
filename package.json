@@ -9,7 +9,9 @@
     "build": "tsc && vite build && electron-builder",
     "build:optimized": "tsc && vite build && electron-builder && node scripts/optimize-dist.js",
     "build:web": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit"
   },
   "build": {
     "appId": "com.visionbridge.app",
@@ -47,33 +49,19 @@
     "win": {
       "target": [
         {
-          "target": "nsis",
+          "target": "portable",
           "arch": ["x64"]
         }
       ],
-      "icon": "public/tray-icon.png",
-      "artifactName": "${productName} Setup ${version}.${ext}"
+      "signAndEditExecutable": false,
+      "artifactName": "${productName} ${version}.${ext}"
     },
-    "nsis": {
-      "oneClick": false,
-      "perMachine": true,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": "always",
-      "createStartMenuShortcut": true,
-      "deleteAppDataOnUninstall": true,
-      "installerHeader": null,
-      "installerSidebar": null,
-      "uninstallerSidebar": null,
-      "allowElevation": true,
-      "runAfterFinish": false
-    },
+    "nsis": null,
     "extraMetadata": {
       "main": "dist-electron/main.js"
     }
   },
   "dependencies": {
-    "axios": "^1.5.0",
-    "framer-motion": "^10.16.4",
     "lucide-react": "^0.284.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
@@ -83,9 +71,9 @@
     "@types/react-dom": "^18.2.7",
     "@vitejs/plugin-react": "^4.0.4",
     "autoprefixer": "^10.4.16",
+    "axios": "^1.5.0",
     "electron": "^26.6.10",
     "electron-builder": "^24.6.4",
-    "electron-vite": "^1.0.27",
     "postcss": "^8.4.31",
     "tailwindcss": "^3.3.3",
     "typescript": "^5.0.2",

@@ -19,8 +19,6 @@ android/local.properties
 android/.externalNativeBuild
 android/.cxx/
 android/captacitor-cordova-android-plugins/build/
-
-# Capacitor
 android/.idea/
 
 # IDE
@@ -34,19 +32,19 @@ android/.idea/
 .DS_Store
 Thumbs.db
 
-# Test files
+# Test & temp files
 test-*.js
 check-*.js
 fix-*.js
-
-# Backup directories
-backup_*/
-
-# Temporary files
 *.tmp
 *.temp
 
-# Environment files
+# Backup directories
+backup_*/
+*.bak
+*.backup
+
+# Environment
 .env
 .env.local
 .env.*.local
@@ -55,8 +53,6 @@ backup_*/
 yarn.lock
 pnpm-lock.yaml
 
-# Design and development documentation (keep README.md)
-ANDROID构建说明.md
-ANDROID开发说明.md
-ANDROID说明.md
+# Design and development documentation
+ANDROID*.md
 ARCHITECTURE_ANALYSIS.md

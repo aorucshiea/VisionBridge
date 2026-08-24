@@ -1,33 +1,30 @@
 const fs = require('fs');
 const path = require('path');
 
-const distPath = path.join(__dirname, '../dist/win-unpacked');
+const platforms = ['win-unpacked', 'linux-unpacked'];
+const keepLocales = ['en-US.pak', 'zh-CN.pak', 'zh-TW.pak'];
 
-// 删除不需要的语言包，只保留中文和英文
-const localesPath = path.join(distPath, 'locales');
-if (fs.existsSync(localesPath)) {
-  const locales = fs.readdirSync(localesPath);
-  const keepLocales = ['en-US.pak', 'zh-CN.pak', 'zh-TW.pak'];
-  
-  locales.forEach(locale => {
+function cleanLocales(dir) {
+  const localesPath = path.join(dir, 'locales');
+  if (!fs.existsSync(localesPath)) return;
+  fs.readdirSync(localesPath).forEach(locale => {
     if (!keepLocales.includes(locale)) {
       fs.unlinkSync(path.join(localesPath, locale));
-      console.log(`Deleted locale: ${locale}`);
     }
   });
 }
 
-// 删除许可证文件（可选，可以保留）
-const licenseFiles = [
-  'LICENSES.chromium.html',
-];
+function cleanLicense(dir) {
+  const file = path.join(dir, 'LICENSES.chromium.html');
+  if (fs.existsSync(file)) fs.unlinkSync(file);
+}
 
-licenseFiles.forEach(file => {
-  const filePath = path.join(distPath, file);
-  if (fs.existsSync(filePath)) {
-    fs.unlinkSync(filePath);
-    console.log(`Deleted license file: ${file}`);
+platforms.forEach(p => {
+  const distPath = path.join(__dirname, `../dist/${p}`);
+  if (fs.existsSync(distPath)) {
+    cleanLocales(distPath);
+    cleanLicense(distPath);
   }
 });
 
-console.log('✅ Optimization complete!');
+console.log('Build optimization complete.');

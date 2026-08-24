@@ -7,6 +7,36 @@ export interface AIRequestPayload {
   messages?: Array<{ role: string; content: any }>
 }
 
+export interface AIServiceConfig {
+  provider: string
+  apiKey: string
+  baseUrl: string
+  model: string
+}
+
+// ---------------------------------------------------------------------------
+// Request cancellation: the renderer aborts via `cancel-ai-requests`, which
+// aborts any in-flight HTTP request in the main process (the renderer-side
+// AbortController alone cannot cancel an ipcRenderer.invoke()).
+// ---------------------------------------------------------------------------
+let activeController: AbortController | null = null
+
+function beginRequest(): AbortSignal {
+  activeController?.abort()
+  const controller = new AbortController()
+  activeController = controller
+  return controller.signal
+}
+
+function endRequest(signal: AbortSignal): void {
+  if (activeController?.signal === signal) activeController = null
+}
+
+export function cancelActiveRequest(): void {
+  activeController?.abort()
+  activeController = null
+}
+
 function cleanUrl(url: string): string {
   if (!url) return ''
   let cleaned = url.trim()
@@ -21,70 +51,90 @@ function cleanUrl(url: string): string {
   return cleaned
 }
 
-export async function callAI(config: any, payload: AIRequestPayload): Promise<string> {
+function extractErrorMessage(e: any): string {
+  return e.response?.data?.error?.message || e.response?.data?.message || e.message || String(e)
+}
+
+/** Retry once on transient network errors. */
+async function withRetry<T>(fn: (signal: AbortSignal) => Promise<T>, signal: AbortSignal): Promise<T> {
+  try {
+    return await fn(signal)
+  } catch (e: any) {
+    const retriable = !e.response && ['ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED', 'ENOTFOUND', 'EPIPE'].includes(e.code)
+    if (retriable && !signal.aborted) {
+      await new Promise(r => setTimeout(r, 1000))
+      return await fn(signal)
+    }
+    throw e
+  }
+}
+
+function abortError(): Error {
+  const err = new Error('Request aborted')
+  err.name = 'AbortError'
+  return err
+}
+
+async function request(config: any, requestData: any, extra: { headers?: Record<string, string>; timeout?: number } = {}): Promise<any> {
+  const signal = beginRequest()
+  try {
+    const response = await withRetry(
+      (sig) => axios.post(config.url, requestData, {
+        headers: extra.headers,
+        timeout: extra.timeout ?? 120000,
+        signal: sig,
+      }),
+      signal
+    )
+    if (signal.aborted) throw abortError()
+    return response
+  } catch (e: any) {
+    if (signal.aborted) throw abortError()
+    if (e.code === 'ECONNABORTED') throw new Error('AI 请求超时。建议：1) 使用更小的模型 2) 启用GPU加速 3) 检查Ollama服务状态')
+    throw e
+  } finally {
+    endRequest(signal)
+  }
+}
+
+export async function callAI(config: AIServiceConfig, payload: AIRequestPayload): Promise<string> {
   const { provider, apiKey, baseUrl, model } = config
   const safeUrl = cleanUrl(baseUrl)
   const trimmedModel = model ? model.trim() : ''
 
-  console.log(`[AI] Target: ${provider} | URL: ${safeUrl} | Model: ${trimmedModel}`)
-  console.log(`[AI] Config:`, { provider, apiKey: apiKey ? '***' : 'empty', baseUrl, model: trimmedModel })
-  console.log(`[AI] Payload:`, { prompt: payload.prompt?.substring(0, 100) + '...', hasImages: !!payload.images, imageCount: payload.images?.length, hasMessages: !!payload.messages, messageCount: payload.messages?.length })
-
-  if (!trimmedModel || trimmedModel === '') {
-    console.error('[AI] Model is empty or undefined!')
+  if (!trimmedModel) {
     throw new Error('Model is required but not provided')
   }
 
   try {
     if (provider === 'ollama') {
       const url = `${safeUrl}/api/chat`
-      console.log(`[AI] POST ${url}`)
-
-      // Use messages if provided, otherwise use prompt
       const messages = payload.messages || [{
         role: 'user',
         content: payload.prompt,
         images: payload.images
       }]
 
-      const requestData = {
+      const response = await request({ url }, {
         model: trimmedModel,
-        messages: messages,
+        messages,
         stream: false
-      }
-      console.log(`[AI] Request data:`, { model: requestData.model, messageCount: messages.length })
-
-      const response = await axios.post(url, requestData, {
-        timeout: 300000, // Increased to 5 minutes for CPU inference
-        headers: { 'Content-Type': 'application/json' }
-      })
-
-      console.log(`[AI] Response status: ${response.status}`)
-      console.log(`[AI] Response data keys:`, Object.keys(response.data))
+      }, { timeout: 300000 }) // 5 minutes for CPU inference
 
       const content = response.data?.message?.content
       if (!content || content.trim() === '') {
-        console.error(`[AI] Empty response from model ${trimmedModel}`)
-        console.error(`[AI] Full response data:`, JSON.stringify(response.data))
         throw new Error(`模型 ${trimmedModel} 返回了空内容。请检查模型是否正常工作，或尝试其他模型。`)
       }
-
-      console.log(`[AI] Success (Ollama), content length: ${content.length}`)
       return content
     }
 
     if (provider === 'openai' || provider === 'custom') {
       const url = `${safeUrl}/v1/chat/completions`
-      console.log(`[AI ${provider}] Requesting ${url}`)
-      console.log(`[AI ${provider}] Model: ${model}`)
-
-      // Use messages if provided, otherwise use prompt
-      const messages = payload.messages || [{
+      const messages: any[] = payload.messages || [{
         role: 'user',
         content: payload.prompt
       }]
 
-      // For chat mode, add images to the first user message if needed
       if (payload.images && payload.images.length > 0 && !payload.messages) {
         messages[0].content = [
           { type: 'text', text: payload.prompt },
@@ -95,44 +145,27 @@ export async function callAI(config: any, payload: AIRequestPayload): Promise<st
         ]
       }
 
-      const requestData = {
-        model: model,
-        messages: messages,
+      const response = await request({ url }, {
+        model: trimmedModel,
+        messages,
         stream: false
-      }
-
-      console.log(`[AI ${provider}] Request data structure:`, {
-        hasImages: !!payload.images?.length,
-        messageCount: messages.length
-      })
-
-      const response = await axios.post(url, requestData, {
+      }, {
         headers: {
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json'
-        },
-        timeout: 120000
+        }
       })
-
-      console.log(`[AI ${provider}] Response status: ${response.status}`)
-      console.log(`[AI ${provider}] Response data keys:`, Object.keys(response.data))
 
       const result = response.data?.choices?.[0]?.message?.content
       if (!result || result.trim() === '') {
-        console.error(`[AI ${provider}] Empty response`)
-        console.error(`[AI ${provider}] Full response:`, JSON.stringify(response.data))
-        throw new Error(`模型 ${model} 返回了空内容。`)
+        throw new Error(`模型 ${trimmedModel} 返回了空内容。`)
       }
-
-      console.log(`[AI ${provider}] Success, content length: ${result.length}`)
       return result
     }
 
     if (provider === 'anthropic') {
       const url = `${safeUrl}/v1/messages`
-      console.log(`[AI] POST ${url} (Anthropic)`)
 
-      // Anthropic doesn't support messages array in the same way, so we'll just use prompt
       const content: any[] = []
       if (payload.images) {
         payload.images.forEach(img => {
@@ -144,8 +177,8 @@ export async function callAI(config: any, payload: AIRequestPayload): Promise<st
       }
       content.push({ type: 'text', text: payload.prompt })
 
-      const response = await axios.post(url, {
-        model: model,
+      const response = await request({ url }, {
+        model: trimmedModel,
         max_tokens: 2048,
         messages: [{ role: 'user', content }]
       }, {
@@ -153,86 +186,55 @@ export async function callAI(config: any, payload: AIRequestPayload): Promise<st
           'x-api-key': apiKey,
           'anthropic-version': '2023-06-01',
           'Content-Type': 'application/json'
-        },
-        timeout: 120000
+        }
       })
-      console.log(`[AI] Success (Anthropic)`)
+
       return response.data?.content?.[0]?.text || '(No text content returned from Claude)'
     }
 
     throw new Error(`Unsupported AI Provider: ${provider}`)
   } catch (e: any) {
-    const errorMsg = e.response?.data?.error?.message || e.response?.data?.message || e.message
-    console.error(`[AI] FAILED:`, errorMsg)
-    if (e.response?.data) {
-      console.error(`[AI] Full Response Error:`, JSON.stringify(e.response.data).slice(0, 500))
-    }
-
-    // Provide helpful error message
-    let userErrorMsg = `${provider} AI Error: ${errorMsg}`
-    if (e.code === 'ECONNABORTED') {
-      userErrorMsg = 'AI 超时。建议：1) 使用更小的模型 2) 启用GPU加速 3) 检查Ollama服务状态'
-    }
-    throw new Error(userErrorMsg)
+    if (e.name === 'AbortError') throw e
+    throw new Error(`${provider} AI Error: ${extractErrorMessage(e)}`)
   }
 }
 
 export function initAIService() {
-  ipcMain.handle('call-ocr', async (_, config: any, imageBase64: string) => {
+  ipcMain.handle('cancel-ai-requests', () => cancelActiveRequest())
+
+  ipcMain.handle('call-ocr', async (_e, config: AIServiceConfig, imageBase64: string) => {
     const { provider, apiKey, baseUrl, model } = config
     const safeUrl = cleanUrl(baseUrl)
-    console.log(`[OCR] Target: ${provider} | URL: ${safeUrl} | Model: ${model}`)
-    console.log(`[OCR] Config:`, { provider, apiKey: apiKey ? '***' : 'empty', baseUrl, model })
-    console.log(`[OCR] Image base64 length: ${imageBase64.length}`)
+    const trimmedModel = model ? model.trim() : ''
 
-    if (!model || model.trim() === '') {
-      console.error('[OCR] Model is empty or undefined!')
+    if (!trimmedModel) {
       throw new Error('Model is required but not provided')
     }
 
     try {
-      // Treat 'local' the same as 'ollama'
       if (provider === 'ollama' || provider === 'local') {
         const url = `${safeUrl}/api/chat`
-        console.log(`[OCR] Requesting ${url}`)
-
-        const requestData = {
-          model: model.trim(),
+        const response = await request({ url }, {
+          model: trimmedModel,
           messages: [{
             role: 'user',
             content: "识别图片中的所有文字，只输出文字内容，不要添加任何解释或说明。如果图片中没有文字，输出'无'。",
             images: [imageBase64]
           }],
           stream: false
-        }
-
-        const response = await axios.post(url, requestData, {
-          timeout: 300000,  // Increased to 5 minutes for CPU inference
-          headers: { 'Content-Type': 'application/json' }
-        })
-
-        console.log(`[OCR] Response status: ${response.status}`)
-        console.log(`[OCR] Response data keys:`, Object.keys(response.data))
+        }, { timeout: 300000 })
 
         const content = response.data?.message?.content
-        if (!content || content.trim() === '' || content === '无') {
-          console.warn('[OCR] No text detected in image')
+        if (!content || content.trim() === '' || content.trim() === '无') {
           throw new Error('OCR未能识别到文字。请确保图片中包含清晰的文字内容。')
         }
-
-        console.log(`[OCR] Success, content length: ${content.length}`)
-        console.log(`[OCR] Content:`, content.substring(0, 100) + '...')
         return content
       }
 
-      if (provider === 'custom') {
+      if (provider === 'custom' || provider === 'openai') {
         const url = `${safeUrl}/v1/chat/completions`
-        console.log(`[OCR Custom] Requesting ${url}`)
-        console.log(`[OCR Custom] Model: ${model}`)
-        console.log(`[OCR Custom] API Key: ${apiKey ? '***' : 'empty'}`)
-
-        const requestData = {
-          model: model,
+        const response = await request({ url }, {
+          model: trimmedModel,
           messages: [{
             role: 'user',
             content: [
@@ -242,51 +244,33 @@ export function initAIService() {
           }],
           stream: false,
           max_tokens: 4096
-        }
-
-        console.log(`[OCR Custom] Request structure:`, {
-          url,
-          hasApiKey: !!apiKey,
-          modelName: model,
-          contentLength: JSON.stringify(requestData).length
-        })
-
-        const response = await axios.post(url, requestData, {
+        }, {
           headers: {
             'Authorization': `Bearer ${apiKey}`,
             'Content-Type': 'application/json'
-          },
-          timeout: 120000
+          }
         })
 
-        console.log(`[OCR Custom] Response status: ${response.status}`)
-        console.log(`[OCR Custom] Response data keys:`, Object.keys(response.data))
-
         const content = response.data?.choices?.[0]?.message?.content
-        if (!content || content.trim() === '' || content === '无') {
-          console.warn('[OCR Custom] No text detected in image')
+        if (!content || content.trim() === '' || content.trim() === '无') {
           throw new Error('OCR未能识别到文字。请确保图片中包含清晰的文字内容。')
         }
-
-        console.log(`[OCR Custom] Success, content length: ${content.length}`)
         return content
       }
 
-      return `${provider} OCR integration pending.`
-    } catch (e: any) {
-      const errorMsg = e.response?.data?.error?.message || e.message
-      console.error(`[OCR] FAILED:`, errorMsg)
-
-      // Provide helpful error message
-      let userErrorMsg = `OCR Failed: ${errorMsg}`
-      if (e.code === 'ECONNABORTED') {
-        userErrorMsg = 'OCR 超时。建议：1) 使用更小的模型（如 deepseek-ocr:3b） 2) 启用GPU加速 3) 减小截图区域'
+      if (provider === 'baidu' || provider === 'google') {
+        throw new Error(`OCR provider "${provider}" 尚未集成，请选择 Ollama 或自定义端点。`)
       }
-      throw new Error(userErrorMsg)
+
+      throw new Error(`Unsupported OCR provider: ${provider}`)
+    } catch (e: any) {
+      if (e.name === 'AbortError') throw e
+      if (e.message.includes('OCR provider') || e.message.includes('尚未集成')) throw e
+      throw new Error(`OCR Failed: ${extractErrorMessage(e)}`)
     }
   })
 
-  ipcMain.handle('call-ai', async (_, config: any, payload: AIRequestPayload) => {
+  ipcMain.handle('call-ai', async (_e, config: AIServiceConfig, payload: AIRequestPayload) => {
     return await callAI(config, payload)
   })
 }

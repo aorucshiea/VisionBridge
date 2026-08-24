@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Languages, MessageSquare, X, Camera } from 'lucide-react'
+import { Languages, MessageSquare, X } from 'lucide-react'
+import { useTranslation } from '../hooks/useTranslation'
 
 interface ScreenshotMaskProps {
   onCapture: (region: { x: number; y: number; width: number; height: number }, mode: 'translate' | 'explain') => void
@@ -7,6 +8,7 @@ interface ScreenshotMaskProps {
 }
 
 const ScreenshotMask: React.FC<ScreenshotMaskProps> = ({ onCapture, onCancel }) => {
+  const { t } = useTranslation()
   const [startPos, setStartPos] = useState<{ x: number; y: number } | null>(null)
   const [currentPos, setCurrentPos] = useState<{ x: number; y: number } | null>(null)
   const [selectedRegion, setSelectedRegion] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
@@ -73,11 +75,11 @@ const ScreenshotMask: React.FC<ScreenshotMaskProps> = ({ onCapture, onCancel }) 
     >
       {/* Top instruction bar */}
       <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-slate-900/80 text-white px-4 py-2 rounded-full text-xs font-medium backdrop-blur-sm border border-slate-700">
-        <span>拖动选择区域 • 按 ESC 退出</span>
+        <span>{t('dragHint')}</span>
         <button
           onClick={(e) => { e.stopPropagation(); onCancel(); }}
           className="p-1 hover:bg-slate-700 rounded-full transition-colors"
-          title="关闭遮罩"
+          title={t('closeMask')}
         >
           <X size={14} />
         </button>
@@ -118,7 +120,7 @@ const ScreenshotMask: React.FC<ScreenshotMaskProps> = ({ onCapture, onCancel }) 
                 className="flex items-center gap-2 px-3 py-2 hover:bg-blue-50 text-blue-600 rounded-lg transition-colors"
               >
                 <Languages size={16} />
-                <span className="text-xs font-bold">翻译</span>
+                <span className="text-xs font-bold">{t('translate')}</span>
               </button>
               <div className="w-[1px] h-4 bg-slate-200 my-1"></div>
               <button
@@ -126,7 +128,7 @@ const ScreenshotMask: React.FC<ScreenshotMaskProps> = ({ onCapture, onCancel }) 
                 className="flex items-center gap-2 px-3 py-2 hover:bg-purple-50 text-purple-600 rounded-lg transition-colors"
               >
                 <MessageSquare size={16} />
-                <span className="text-xs font-bold">解释</span>
+                <span className="text-xs font-bold">{t('explain')}</span>
               </button>
               <div className="w-[1px] h-4 bg-slate-200 my-1"></div>
               <button

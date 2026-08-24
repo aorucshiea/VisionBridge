@@ -2,154 +2,169 @@ import { app, BrowserWindow, globalShortcut, Tray, Menu, ipcMain, desktopCapture
 import path from 'node:path'
 import fs from 'node:fs'
 import axios from 'axios'
-import { initSettings, getSettings } from './settings'
+import { initSettings, getSettings, writeSettings } from './settings'
 import { initAIService, callAI } from './ai'
 
 // Disable hardware acceleration to fix transparency issues on some Windows machines
 app.disableHardwareAcceleration()
+app.setAppUserModelId('com.visionbridge.app')
+
+// Enforce single instance: focus the existing window instead of launching a duplicate
+const gotTheLock = app.requestSingleInstanceLock()
+if (!gotTheLock) {
+  app.quit()
+}
 
 process.env.DIST = path.join(__dirname, '../dist')
 process.env.PUBLIC = app.isPackaged ? process.env.DIST! : path.join(__dirname, '../public')
 
 const PRELOAD_PATH = path.join(__dirname, 'preload.js')
-
-function createWindow() {
-  win = new BrowserWindow({
-    width: 450,
-    height: 650,
-    icon: path.join(process.env.PUBLIC || '', 'electron-vite.svg'),
-    frame: false,
-    show: false,
-    webPreferences: {
-      preload: PRELOAD_PATH,
-      sandbox: false,
-    },
-    titleBarStyle: 'hidden',
-  })
-
-  if (VITE_DEV_SERVER_URL) {
-    win.loadURL(VITE_DEV_SERVER_URL)
-  } else {
-    win.loadFile(path.join(process.env.DIST || '', 'index.html'))
-  }
-
-  win.webContents.on('did-finish-load', () => {
-    console.log('[Main] Window finished loading')
-    win?.showInactive()
-  })
-
-  win.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
-    console.error('[Main] Window failed to load:', errorCode, errorDescription)
-  })
-
-  win.on('closed', () => {
-    console.log('[Main] Window closed')
-    win = null
-  })
-
-win.on('close', async (e) => {
-    console.log('[Main] Window close event triggered')
-    
-    if (isQuitting) {
-      console.log('[Main] App is quitting, allowing close')
-      return
-    }
-    
-    const settings = await getSettings()
-    console.log('[Main] showCloseConfirm:', settings.showCloseConfirm)
-    
-    if (settings.showCloseConfirm) {
-      console.log('[Main] Showing close confirm dialog')
-      e.preventDefault()
-      
-      try {
-        // 使用dialog.showMessageBox，不使用parent窗口
-        const response = await dialog.showMessageBox({
-          type: 'question',
-          buttons: ['关闭应用', '最小化到托盘'],
-          title: '关闭确认',
-          message: '确定要关闭 VisionBridge 吗？',
-          detail: '选择"关闭应用"将退出程序，选择"最小化到托盘"将在后台运行。',
-          checkboxLabel: '不再提醒',
-          checkboxChecked: false,
-          defaultId: 0,
-          cancelId: 1,
-          noLink: true
-        })
-        
-        console.log('[Main] Close confirm dialog response:', response)
-        
-        if (response.checkboxChecked) {
-          console.log('[Main] User checked "dont show again"')
-          settings.showCloseConfirm = false
-          const settingsPath = path.join(app.getPath('userData'), 'settings.json')
-          fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2))
-        }
-        
-        if (response.response === 0) {
-          // 关闭应用
-          console.log('[Main] User chose to close app')
-          isQuitting = true
-          app.quit()
-        } else {
-          // 最小化到托盘
-          console.log('[Main] User chose to minimize to tray')
-          if (win && !win.isDestroyed()) {
-            win.hide()
-          }
-          if (tray) {
-            tray.displayBalloon({
-              title: 'VisionBridge',
-              content: '已最小化到托盘。右键托盘图标可以退出。'
-            })
-          }
-        }
-      } catch (error) {
-        console.error('[Main] Error showing close confirm dialog:', error)
-        // 发生错误时默认最小化到托盘
-        if (win && !win.isDestroyed()) {
-          win.hide()
-        }
-        if (tray) {
-          tray.displayBalloon({
-            title: 'VisionBridge',
-            content: '已最小化到托盘。右键托盘图标可以退出。'
-          })
-        }
-      }
-    } else {
-      console.log('[Main] Hiding window to tray')
-      e.preventDefault()
-      if (win && !win.isDestroyed()) {
-        win.hide()
-      }
-      if (tray) {
-        tray.displayBalloon({
-          title: 'VisionBridge',
-          content: '已最小化到托盘。右键托盘图标可以退出。'
-        })
-      }
-    }
-  })
-}
+const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
 
 let win: BrowserWindow | null = null
 let resultWin: BrowserWindow | null = null
 let maskWin: BrowserWindow | null = null
 let tray: Tray | null = null
-const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
+let isQuitting = false
+
+const SECURE_WEB_PREFERENCES = {
+  preload: PRELOAD_PATH,
+  contextIsolation: true,
+  sandbox: true,
+  nodeIntegration: false,
+  webSecurity: true,
+  spellcheck: false,
+}
+
+const DIALOG_I18N: Record<'zh' | 'en', Record<string, string>> = {
+  zh: {
+    title: '关闭确认',
+    message: '确定要关闭 VisionBridge 吗？',
+    detail: '选择"关闭应用"将退出程序，选择"最小化到托盘"将在后台运行。',
+    close: '关闭应用',
+    minimize: '最小化到托盘',
+    checkbox: '不再提醒',
+    minimizedBalloon: '已最小化到托盘。右键托盘图标可以退出。',
+  },
+  en: {
+    title: 'Close Confirmation',
+    message: 'Are you sure you want to close VisionBridge?',
+    detail: 'Choose "Close App" to quit, or "Minimize to Tray" to keep running in the background.',
+    close: 'Close App',
+    minimize: 'Minimize to Tray',
+    checkbox: 'Don\'t ask again',
+    minimizedBalloon: 'Minimized to tray. Right-click the tray icon to quit.',
+  },
+}
+
+const TEST_I18N: Record<'zh' | 'en', Record<string, (a?: string, b?: string) => string>> = {
+  zh: {
+    connected: () => '连接成功',
+    modelAvailable: () => '模型可用',
+    modelNotFound: (model, list) => `模型 ${model} 未找到，可用模型: ${list}`,
+    unsupported: (provider) => `不支持的 provider: ${provider}`,
+    failed: (msg) => `连接失败: ${msg}`,
+  },
+  en: {
+    connected: () => 'Connection successful',
+    modelAvailable: () => 'Model available',
+    modelNotFound: (model, list) => `Model ${model} not found. Available models: ${list}`,
+    unsupported: (provider) => `Unsupported provider: ${provider}`,
+    failed: (msg) => `Connection failed: ${msg}`,
+  },
+}
+
+function loadWindowUrl(w: BrowserWindow, suffix = ''): void {
+  const url = VITE_DEV_SERVER_URL
+    ? `${VITE_DEV_SERVER_URL}${suffix}`
+    : `file://${path.join(process.env.DIST || '', 'index.html')}${suffix}`
+  w.loadURL(url)
+}
+
+function createWindow() {
+  win = new BrowserWindow({
+    width: 450,
+    height: 650,
+    icon: path.join(process.env.PUBLIC || '', 'tray-icon.png'),
+    frame: false,
+    show: false,
+    titleBarStyle: 'hidden',
+    webPreferences: SECURE_WEB_PREFERENCES,
+  })
+
+  loadWindowUrl(win)
+
+  win.webContents.on('did-finish-load', () => win?.showInactive())
+  win.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+    console.error('[Main] Window failed to load:', errorCode, errorDescription)
+  })
+
+  win.on('closed', () => { win = null })
+
+  win.on('close', (e) => {
+    if (isQuitting) return
+
+    e.preventDefault()
+    handleCloseRequest()
+  })
+}
+
+/** Shared close logic: confirm with the user, then quit or hide to tray. */
+async function handleCloseRequest(): Promise<void> {
+  const settings = getSettings()
+  const i18n = DIALOG_I18N[settings.language] || DIALOG_I18N.zh
+
+  if (!settings.showCloseConfirm) {
+    hideToTray(i18n)
+    return
+  }
+
+  try {
+    const response = await dialog.showMessageBox({
+      type: 'question',
+      buttons: [i18n.close, i18n.minimize],
+      title: i18n.title,
+      message: i18n.message,
+      detail: i18n.detail,
+      checkboxLabel: i18n.checkbox,
+      checkboxChecked: false,
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+    })
+
+    if (response.checkboxChecked) {
+      settings.showCloseConfirm = false
+      writeSettings(settings)
+    }
+
+    if (response.response === 0) {
+      isQuitting = true
+      app.quit()
+    } else {
+      hideToTray(i18n)
+    }
+  } catch (error) {
+    console.error('[Main] Error showing close confirm dialog:', error)
+    hideToTray(i18n)
+  }
+}
+
+function hideToTray(i18n: Record<string, string>): void {
+  if (win && !win.isDestroyed()) win.hide()
+  if (tray && !tray.isDestroyed()) {
+    tray.displayBalloon({ title: 'VisionBridge', content: i18n.minimizedBalloon })
+  }
+}
 
 function createMaskWindow() {
-  const primaryDisplay = screen.getPrimaryDisplay()
-  const { width, height } = primaryDisplay.bounds
-
-  console.log(`[Main] Creating Mask Window: ${width}x${height}`)
+  // Multi-display support: open the mask on the display under the cursor
+  const cursorPoint = screen.getCursorScreenPoint()
+  const display = screen.getDisplayNearestPoint(cursorPoint)
+  const { x, y, width, height } = display.bounds
 
   maskWin = new BrowserWindow({
-    width,
-    height,
-    x: 0,
-    y: 0,
+    x, y, width, height,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
@@ -160,34 +175,20 @@ function createMaskWindow() {
     hasShadow: false,
     focusable: true,
     backgroundColor: '#00000000',
-    webPreferences: {
-      preload: PRELOAD_PATH,
-      sandbox: false,
-    },
+    webPreferences: SECURE_WEB_PREFERENCES,
   })
 
   maskWin.setMenu(null)
-
-  // Critical for Windows transparency and staying on top
   if (process.platform === 'win32') {
     maskWin.setSkipTaskbar(true)
     maskWin.setAlwaysOnTop(true, 'screen-saver')
   }
-
   maskWin.setVisibleOnAllWorkspaces(true)
   maskWin.focus()
 
-  // Use both query param and hash to be safe
-  const url = VITE_DEV_SERVER_URL
-    ? `${VITE_DEV_SERVER_URL}?window=mask#mask`
-    : `file://${path.join(process.env.DIST || '', 'index.html')}?window=mask#mask`
+  loadWindowUrl(maskWin, '?window=mask#mask')
 
-  console.log(`[Main] Loading Mask URL: ${url}`)
-  maskWin.loadURL(url)
-
-  maskWin.on('closed', () => {
-    maskWin = null
-  })
+  maskWin.on('closed', () => { maskWin = null })
 }
 
 function createResultWindow() {
@@ -200,207 +201,144 @@ function createResultWindow() {
     transparent: true,
     skipTaskbar: true,
     backgroundColor: '#00000000',
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-    },
+    webPreferences: SECURE_WEB_PREFERENCES,
   })
 
-  const url = VITE_DEV_SERVER_URL
-    ? `${VITE_DEV_SERVER_URL}?window=result`
-    : `file://${path.join(process.env.DIST || '', 'index.html')}?window=result`
-
-  resultWin.loadURL(url)
+  loadWindowUrl(resultWin, '?window=result')
 }
 
+// ---------------------------------------------------------------------------
 // IPC Handlers
+// ---------------------------------------------------------------------------
 ipcMain.handle('minimize-window', () => win?.minimize())
 ipcMain.handle('maximize-window', () => {
-  if (win?.isMaximized()) {
-    win.unmaximize()
-  } else {
-    win?.maximize()
-  }
+  if (!win) return
+  if (win.isMaximized()) win.unmaximize()
+  else win.maximize()
 })
 ipcMain.handle('close-window', () => win?.close())
 
-ipcMain.on('process-screenshot', (event, data) => {
-  // Forward the message from mask window to main window
-  // Check if result window is visible and in chat mode
+ipcMain.on('process-screenshot', (_event, data) => {
+  // Forward the message from mask window to the result window (chat mode)
+  // or the main window (normal processing)
   if (resultWin && !resultWin.isDestroyed() && resultWin.isVisible()) {
-    // Send to result window for chat mode
     resultWin.webContents.send('append-screenshot', data)
   } else if (win && win.webContents) {
-    // Send to main window for normal processing
     win.webContents.send('process-screenshot', data)
   }
 })
 
 ipcMain.handle('open-mask', () => {
-  if (!maskWin) createMaskWindow()
-})
-
-ipcMain.handle('close-mask', () => {
-  maskWin?.destroy()
-})
-
-ipcMain.handle('hide-mask', () => {
-  maskWin?.hide()
-})
-
-ipcMain.handle('show-result', async (event, { x, y, content }) => {
-  console.log(`[Main] show-result called with: x=${x}, y=${y}, content=${content.substring(0, 50)}...`)
-  
-  if (!resultWin) {
-    console.log('[Main] Creating result window')
-    createResultWindow()
+  if (maskWin && !maskWin.isDestroyed()) {
+    maskWin.show()
+    maskWin.focus()
+  } else {
+    createMaskWindow()
   }
+})
+
+ipcMain.handle('close-mask', () => maskWin?.destroy())
+ipcMain.handle('hide-mask', () => maskWin?.hide())
+
+ipcMain.handle('show-result', async (_event, { x, y, content }: { x: number; y: number; content: string }) => {
+  if (!resultWin || resultWin.isDestroyed()) createResultWindow()
 
   if (resultWin?.webContents.isLoading()) {
-    console.log('[Main] Waiting for result window to load')
     await new Promise(resolve => resultWin?.webContents.once('did-finish-load', resolve))
   }
 
-  // Ensure the window doesn't go off-screen
+  // Keep the window on-screen
+  const bounds = resultWin!.getBounds()
   const display = screen.getDisplayNearestPoint({ x: Math.round(x), y: Math.round(y) })
   let finalX = x
   let finalY = y
-  if (x + 380 > display.bounds.width) finalX = x - 390
-  if (y + 280 > display.bounds.height) finalY = display.bounds.height - 290
+  if (x + bounds.width > display.bounds.width) finalX = x - bounds.width - 10
+  if (y + bounds.height > display.bounds.height) finalY = display.bounds.height - bounds.height - 10
 
-  console.log(`[Main] Positioning result window at: ${Math.round(finalX)}, ${Math.round(finalY)}`)
-  resultWin?.setPosition(Math.round(finalX), Math.round(finalY))
-  resultWin?.show()
-  console.log(`[Main] Result window shown, sending content`)
-  resultWin?.webContents.send('display-content', content)
+  resultWin!.setPosition(Math.round(finalX), Math.round(finalY))
+  resultWin!.show()
+  resultWin!.webContents.send('display-content', content)
 })
 
-ipcMain.handle('hide-result', () => {
-  resultWin?.hide()
-})
+ipcMain.handle('hide-result', () => resultWin?.hide())
 
-ipcMain.handle('chat-with-ai', async (event, messages: Array<{ role: string; content: string }>) => {
-  const settings = await getSettings()
-  console.log('[Main] chat-with-ai called, mode:', settings.mode)
+ipcMain.handle('chat-with-ai', async (_event, messages: Array<{ role: string; content: string }>) => {
+  const settings = getSettings()
+  const isVlm = settings.mode === 'VLM'
+  const config = isVlm
+    ? { provider: settings.vlmProvider, apiKey: settings.vlmApiKey, baseUrl: settings.vlmBaseUrl, model: settings.vlmModel }
+    : { provider: settings.llmProvider, apiKey: settings.llmApiKey, baseUrl: settings.llmBaseUrl, model: settings.llmModel }
 
-  try {
-    let result = ''
-    if (settings.mode === 'VLM') {
-      // Use VLM model for chat
-      result = await callAI({
-        provider: settings.vlmProvider,
-        apiKey: settings.vlmApiKey,
-        baseUrl: settings.vlmBaseUrl,
-        model: settings.vlmModel
-      }, {
-        prompt: messages[messages.length - 1].content,
-        messages: messages.map(m => ({
-          role: m.role,
-          content: m.content
-        }))
-      })
-    } else {
-      // Use LLM model for chat (Pipe B)
-      result = await callAI({
-        provider: settings.llmProvider,
-        apiKey: settings.llmApiKey,
-        baseUrl: settings.llmBaseUrl,
-        model: settings.llmModel
-      }, {
-        prompt: messages[messages.length - 1].content,
-        messages: messages.map(m => ({
-          role: m.role,
-          content: m.content
-        }))
-      })
-    }
-    return result
-  } catch (error: any) {
-    console.error('[Main] chat-with-ai error:', error)
-    throw error
-  }
+  return await callAI(config, {
+    prompt: messages[messages.length - 1].content,
+    messages: messages.map(m => ({ role: m.role, content: m.content })),
+  })
 })
 
 ipcMain.handle('capture-screen', async () => {
+  // Capture the display under the cursor (multi-display support)
+  const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
   const sources = await desktopCapturer.getSources({
     types: ['screen'],
-    thumbnailSize: screen.getPrimaryDisplay().size
+    thumbnailSize: display.size,
   })
-  return sources[0].thumbnail.toDataURL()
+  return sources[0]?.thumbnail.toDataURL()
 })
 
-ipcMain.handle('save-chat-history', async (event, data: { messages: Array<{ role: string; content: string }>, originalContent: string }) => {
-  console.log('[Main] save-chat-history called')
+ipcMain.handle('save-chat-history', async (_event, data: { messages: Array<{ role: string; content: string }>; originalContent: string }) => {
+  const settings = getSettings()
+  const historyPath = path.join(app.getPath('userData'), 'chat-history.json')
 
-  try {
-    const settings = await getSettings()
-    const historyPath = path.join(app.getPath('userData'), 'chat-history.json')
-
-    // Read existing history
-    let history: any[] = []
-    if (fs.existsSync(historyPath)) {
-      try {
-        const data = fs.readFileSync(historyPath, 'utf-8')
-        history = JSON.parse(data)
-      } catch (e) {
-        console.error('[Main] Failed to read chat history:', e)
-      }
-    }
-
-    // Generate title using AI
-    let title = '未命名对话'
+  let history: any[] = []
+  if (fs.existsSync(historyPath)) {
     try {
-      const titlePrompt = `请为以下对话生成一个简短的标题（不超过15个字），概括对话的主题：\n\n对话内容：\n${data.messages.map(m => `${m.role}: ${m.content}`).join('\n\n')}\n\n只输出标题，不要其他内容。`
-
-      const titleResult = await callAI({
-        provider: settings.mode === 'VLM' ? settings.vlmProvider : settings.llmProvider,
-        apiKey: settings.mode === 'VLM' ? settings.vlmApiKey : settings.llmApiKey,
-        baseUrl: settings.mode === 'VLM' ? settings.vlmBaseUrl : settings.llmBaseUrl,
-        model: settings.mode === 'VLM' ? settings.vlmModel : settings.llmModel
-      }, {
-        prompt: titlePrompt
-      })
-
-      title = titleResult.trim().substring(0, 20) // Limit to 20 chars
-    } catch (e: any) {
-      console.error('[Main] Failed to generate title:', e)
-      // Fallback title
-      title = `对话 ${new Date().toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
+      history = JSON.parse(fs.readFileSync(historyPath, 'utf-8'))
+    } catch (e) {
+      console.error('[Main] Failed to read chat history:', e)
     }
-
-    // Create new history entry
-    const newEntry = {
-      id: Date.now(),
-      title: title,
-      messages: data.messages,
-      originalContent: data.originalContent,
-      createdAt: new Date().toISOString()
-    }
-
-    // Add to history
-    history.unshift(newEntry)
-
-    // Keep only last 50 conversations
-    if (history.length > 50) {
-      history = history.slice(0, 50)
-    }
-
-    // Save history
-    fs.writeFileSync(historyPath, JSON.stringify(history, null, 2))
-
-    console.log('[Main] Chat history saved:', title)
-    return { success: true, title }
-  } catch (error: any) {
-    console.error('[Main] Failed to save chat history:', error)
-    throw error
   }
+
+  // Generate title using AI (short timeout so this never blocks the UI)
+  let title = `对话 ${new Date().toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
+  try {
+    const titlePrompt = `请为以下对话生成一个简短的标题（不超过15个字），概括对话的主题：\n\n对话内容：\n${data.messages.map(m => `${m.role}: ${m.content}`).join('\n\n')}\n\n只输出标题，不要其他内容。`
+
+    const isVlm = settings.mode === 'VLM'
+    const titleResult = await callAI({
+      provider: isVlm ? settings.vlmProvider : settings.llmProvider,
+      apiKey: isVlm ? settings.vlmApiKey : settings.llmApiKey,
+      baseUrl: isVlm ? settings.vlmBaseUrl : settings.llmBaseUrl,
+      model: isVlm ? settings.vlmModel : settings.llmModel,
+    }, { prompt: titlePrompt }).catch(() => '')
+
+    if (titleResult.trim()) title = titleResult.trim().substring(0, 20)
+  } catch (e) {
+    console.error('[Main] Failed to generate title:', e)
+  }
+
+  const newEntry = {
+    id: Date.now(),
+    title,
+    messages: data.messages,
+    originalContent: data.originalContent,
+    createdAt: new Date().toISOString(),
+  }
+
+  history.unshift(newEntry)
+  if (history.length > 50) history = history.slice(0, 50)
+
+  const tmpPath = `${historyPath}.tmp`
+  fs.writeFileSync(tmpPath, JSON.stringify(history, null, 2))
+  fs.renameSync(tmpPath, historyPath)
+
+  return { success: true, title }
 })
 
 ipcMain.handle('get-chat-history', async () => {
   const historyPath = path.join(app.getPath('userData'), 'chat-history.json')
   if (fs.existsSync(historyPath)) {
     try {
-      const data = fs.readFileSync(historyPath, 'utf-8')
-      return JSON.parse(data)
+      return JSON.parse(fs.readFileSync(historyPath, 'utf-8'))
     } catch (e) {
       return []
     }
@@ -408,14 +346,12 @@ ipcMain.handle('get-chat-history', async () => {
   return []
 })
 
-ipcMain.handle('delete-chat-history', async (event, id: number) => {
+ipcMain.handle('delete-chat-history', async (_event, id: number) => {
   const historyPath = path.join(app.getPath('userData'), 'chat-history.json')
   if (fs.existsSync(historyPath)) {
     try {
-      const data = fs.readFileSync(historyPath, 'utf-8')
-      const history = JSON.parse(data)
-      const newHistory = history.filter((item: any) => item.id !== id)
-      fs.writeFileSync(historyPath, JSON.stringify(newHistory, null, 2))
+      const history = JSON.parse(fs.readFileSync(historyPath, 'utf-8'))
+      fs.writeFileSync(historyPath, JSON.stringify(history.filter((item: any) => item.id !== id), null, 2))
       return { success: true }
     } catch (e) {
       return { success: false }
@@ -424,159 +360,115 @@ ipcMain.handle('delete-chat-history', async (event, id: number) => {
   return { success: false }
 })
 
-// Save configuration
-ipcMain.handle('save-configuration', async (event, data: { name: string, pipeline: 'VLM' | 'OCR+LLM' | 'VLM+LLM', config: any, tags?: string[] }) => {
-  const settings = await getSettings()
+ipcMain.handle('save-configuration', async (_event, data: { name: string; pipeline: 'VLM' | 'OCR+LLM' | 'VLM+LLM'; config: any; tags?: string[] }) => {
+  const settings = getSettings()
   const newConfig = {
     id: Date.now().toString(),
     name: data.name,
     pipeline: data.pipeline,
     createdAt: new Date().toISOString(),
     config: data.config,
-    tags: data.tags || []
+    tags: data.tags || [],
   }
 
-  if (!settings.savedConfigurations) {
-    settings.savedConfigurations = []
-  }
-
+  settings.savedConfigurations = settings.savedConfigurations || []
   settings.savedConfigurations.push(newConfig)
-
-  // Save to file
-  const settingsPath = path.join(app.getPath('userData'), 'settings.json')
-  fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2))
+  writeSettings(settings)
 
   return { success: true, id: newConfig.id }
 })
 
-// Get saved configurations
 ipcMain.handle('get-saved-configurations', async () => {
-  const settings = await getSettings()
-  return settings.savedConfigurations || []
+  return (await getSettings()).savedConfigurations || []
 })
 
-// Delete saved configuration
-ipcMain.handle('delete-configuration', async (event, id: string) => {
-  const settings = await getSettings()
+ipcMain.handle('delete-configuration', async (_event, id: string) => {
+  const settings = getSettings()
   if (settings.savedConfigurations) {
     settings.savedConfigurations = settings.savedConfigurations.filter((c: any) => c.id !== id)
-
-    const settingsPath = path.join(app.getPath('userData'), 'settings.json')
-    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2))
-
+    writeSettings(settings)
     return { success: true }
   }
   return { success: false }
 })
 
-ipcMain.handle('test-connection', async (event, config: any, type: 'vlm' | 'ocr' | 'llm' | 'vlm2' | 'llm2') => {
-  console.log(`[Main] Testing ${type} connection...`)
+ipcMain.handle('test-connection', async (_event, config: any) => {
   const { provider, apiKey, baseUrl, model } = config
+  const i18n = TEST_I18N[getSettings().language] || TEST_I18N.zh
 
   // Clean URL
   let cleanBaseUrl = baseUrl.trim()
-  // Remove any malformed protocol (e.g., https:// or https:://)
   cleanBaseUrl = cleanBaseUrl.replace(/^https?:\/\/:?\/+/, '')
   if (!cleanBaseUrl.startsWith('http://') && !cleanBaseUrl.startsWith('https://')) {
     cleanBaseUrl = 'https://' + cleanBaseUrl
   }
-  // Remove trailing slashes
   cleanBaseUrl = cleanBaseUrl.replace(/\/+$/, '')
-
-  console.log(`[Main] Cleaned URL: ${cleanBaseUrl}`)
 
   try {
     if (provider === 'ollama') {
       // For Ollama, check if the service is accessible and model exists
-      const url = `${cleanBaseUrl}/api/tags`
-      console.log(`[Main] Testing Ollama at: ${url}`)
-      const response = await axios.get(url, { timeout: 5000 })
+      const response = await axios.get(`${cleanBaseUrl}/api/tags`, { timeout: 5000 })
       const models = response.data?.models || []
       const modelExists = models.some((m: any) => m.name === model || m.name.startsWith(model))
       return {
         success: true,
         available: modelExists,
-        message: modelExists ? '模型可用' : `模型 ${model} 未找到，可用模型: ${models.map((m: any) => m.name).join(', ')}`
+        message: modelExists ? i18n.modelAvailable() : i18n.modelNotFound(model, models.map((m: any) => m.name).join(', ')),
       }
     }
 
     if (provider === 'openai' || provider === 'custom') {
-      // For OpenAI-compatible APIs, send a minimal request
-      const url = `${cleanBaseUrl}/v1/chat/completions`
-      console.log(`[Main] Testing OpenAI-compatible at: ${url}`)
-      const response = await axios.post(url, {
-        model: model,
+      await axios.post(`${cleanBaseUrl}/v1/chat/completions`, {
+        model,
         messages: [{ role: 'user', content: 'OK' }],
         max_tokens: 1,
-        stream: false
+        stream: false,
       }, {
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
-        },
-        timeout: 10000
+        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        timeout: 10000,
       })
-
-      if (response.status === 200) {
-        return {
-          success: true,
-          available: true,
-          message: '连接成功'
-        }
-      }
+      return { success: true, available: true, message: i18n.connected() }
     }
 
     if (provider === 'anthropic') {
-      const url = `${cleanBaseUrl}/v1/messages`
-      const response = await axios.post(url, {
-        model: model,
+      await axios.post(`${cleanBaseUrl}/v1/messages`, {
+        model,
         max_tokens: 1,
-        messages: [{ role: 'user', content: 'OK' }]
+        messages: [{ role: 'user', content: 'OK' }],
       }, {
-        headers: {
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'Content-Type': 'application/json'
-        },
-        timeout: 10000
+        headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
+        timeout: 10000,
       })
-
-      if (response.status === 200) {
-        return {
-          success: true,
-          available: true,
-          message: '连接成功'
-        }
-      }
+      return { success: true, available: true, message: i18n.connected() }
     }
 
-    return {
-      success: false,
-      available: false,
-      message: `不支持的provider: ${provider}`
-    }
+    return { success: false, available: false, message: i18n.unsupported(provider) }
   } catch (error: any) {
-    console.error(`[Main] Connection test failed:`, error)
     const errorMsg = error.response?.data?.error?.message || error.message
-    return {
-      success: false,
-      available: false,
-      message: `连接失败: ${errorMsg}`
-    }
+    return { success: false, available: false, message: i18n.failed(errorMsg) }
   }
 })
 
+// ---------------------------------------------------------------------------
+// App lifecycle
+// ---------------------------------------------------------------------------
 app.on('window-all-closed', () => {
-  // Don't quit on window-all-closed, let tray control app lifecycle
+  // Don't quit on window-all-closed, let the tray control the app lifecycle
   if (process.platform !== 'darwin' && !tray) {
     app.quit()
   }
 })
 
-let isQuitting = false
-
 app.on('before-quit', () => {
   isQuitting = true
+})
+
+app.on('second-instance', () => {
+  if (win) {
+    if (win.isMinimized()) win.restore()
+    win.show()
+    win.focus()
+  }
 })
 
 app.whenReady().then(() => {
@@ -587,24 +479,31 @@ app.whenReady().then(() => {
   createResultWindow()
 
   globalShortcut.register('Alt+A', () => {
-    if (!maskWin) createMaskWindow()
+    if (maskWin && !maskWin.isDestroyed()) {
+      maskWin.show()
+      maskWin.focus()
+    } else {
+      createMaskWindow()
+    }
   })
 
   const iconPath = path.join(process.env.PUBLIC || '', 'tray-icon.png')
-  console.log(`[Main] Tray Icon Path: ${iconPath}`)
-
   try {
-    const fs = require('fs')
     if (fs.existsSync(iconPath)) {
       tray = new Tray(iconPath)
+      const lang = getSettings().language
+      const showLabel = lang === 'zh' ? '显示 VisionBridge' : 'Show VisionBridge'
+      const hideLabel = lang === 'zh' ? '隐藏 VisionBridge' : 'Hide VisionBridge'
+      const quitLabel = lang === 'zh' ? '退出' : 'Quit'
       const contextMenu = Menu.buildFromTemplate([
-        { label: '显示 VisionBridge', click: () => { win?.show(); win?.focus(); } },
-        { label: '隐藏 VisionBridge', click: () => win?.hide() },
+        { label: showLabel, click: () => { win?.show(); win?.focus(); } },
+        { label: hideLabel, click: () => win?.hide() },
         { type: 'separator' },
-        { label: '退出', click: () => app.quit() }
+        { label: quitLabel, click: () => app.quit() },
       ])
       tray.setToolTip('VisionBridge')
       tray.setContextMenu(contextMenu)
+      tray.on('double-click', () => { win?.show(); win?.focus(); })
     } else {
       console.warn(`[Main] Tray icon not found at ${iconPath}. Skipping tray creation.`)
     }

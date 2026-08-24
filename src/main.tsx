@@ -8,13 +8,3 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <App />
   </React.StrictMode>,
 )
-
-// Remove Preload scripts loading (Electron only)
-if (window.ipcRenderer) {
-  postMessage({ payload: 'removeLoading' }, '*')
-  
-  // Use contextBridge (Electron only)
-  window.ipcRenderer.on('main-process-message', (_event: any, message: any) => {
-    console.log(message)
-  })
-}
