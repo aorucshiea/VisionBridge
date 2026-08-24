@@ -30,27 +30,8 @@ The tool has three built-in "pipelines" for processing images, suitable for diff
 
 1.  **Download**: Download the latest installation package from [release](https://github.com/aorucshiea/VisionBridge/releases).
 2.  **Install**: Run the installer just like any other software.
-3.  **Configure (Optional)**: If you want to use your own AI API, you can fill them in the settings. See [Free AI Model Providers](#free-ai-model-providers) below for recommended options.
+3.  **Configure (Optional)**: If you want to use your own AI API, you can fill them in the settings.
 4.  **Use**: Press the default `Alt+A` (configurable) to take a screenshot, select an area, and the result will appear in a floating window next to it.
-
-### Free AI Model Providers
-
-You can use these free AI model providers with VisionBridge:
-
-**Recommended:**
-
-| Provider | Description |
-|----------|-------------|
-| **iflow** ⭐ | ~2000 API calls/day, includes GLM-4.6, Qwen3, DeepSeek - Sufficient for normal use |
-| **NVIDIA NIM** ⭐ | 1000-5000 credits for development, includes GLM-4.7, MiniMax-M2.1 - Sufficient for normal use |
-| **anigravity** ⭐ | Weekly free quota for Gemini and Claude latest models - Sufficient for normal use |
-| **ModelScope (魔塔)** ⭐ | 2000 free calls/day, 500 per model, covers Qwen, DeepSeek, GLM - Sufficient for normal use |
-| **Free Qwen3** 🆓 | Completely free, no registration required - Sufficient for normal use |
-| **Free QwQ-32B** 🆓 | Completely free, no registration, unlimited calls - Sufficient for normal use |
-
-**More Options:**
-
-For a comprehensive list of all free AI model providers (including official platforms, aggregation services, and special APIs), see [FREE_MODELS.md](FREE_MODELS.md).
 
 ### How is it technically implemented?
 
@@ -62,7 +43,7 @@ You can freely configure which AI service to use at each step (cloud API or loca
 
 ### FAQ
 
-*   **Is it free?** The tool itself is free. But if you use paid third-party AI APIs (like GPT-4), you'll incur the corresponding costs. However, there are many free model providers available (see above).
+*   **Is it free?** The tool itself is free. But if you use paid third-party AI APIs (like GPT-4), you'll incur the corresponding costs.
 *   **Is my screenshot data secure?** If you configure cloud AI services, images will be sent to the corresponding service provider. If you use local models exclusively, your data stays entirely on your computer.
 *   **Why is the installation package a bit large?** Because it includes some necessary runtime environments and basic local processing models to ensure some functionality works even without an internet connection.
 

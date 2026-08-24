@@ -47,8 +47,9 @@ const ResultView: React.FC = () => {
   // Listen for append-screenshot event (chat mode)
   useEffect(() => {
     return window.ipcRenderer.onAppendScreenshot((data) => {
+      setIsChatMode(true)
+      setIsProcessing(false)
       setMessages(prev => [...prev, { role: 'user', content: `[${t('screenshot')}: ${data.region.width}x${data.region.height}]\n${t('processing')}` }])
-      setIsProcessing(true)
       setIsSending(true)
       processScreenshot(data.region, data.mode)
     })
@@ -143,7 +144,11 @@ const ResultView: React.FC = () => {
   }
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(content)
+    // In chat mode copy the whole conversation; otherwise the plain result.
+    const text = isChatMode
+      ? messages.map(m => `${m.role === 'user' ? '>>' : 'AI'}: ${m.content}`).join('\n\n')
+      : content
+    navigator.clipboard.writeText(text)
   }
 
   const handleSend = async () => {
@@ -168,7 +173,8 @@ const ResultView: React.FC = () => {
 
   const handleContinueScreenshot = () => {
     window.ipcRenderer.hideResult()
-    window.ipcRenderer.openMask()
+    // Route the upcoming capture back to this chat window.
+    window.ipcRenderer.openMask('result')
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

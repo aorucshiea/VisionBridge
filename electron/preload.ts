@@ -32,7 +32,8 @@ const api = {
   sendProcessScreenshot: (data: { region: any; mode: any }) => ipcRenderer.send('process-screenshot', data),
   showResult: (data: { x: number; y: number; content: string }) => ipcRenderer.invoke('show-result', data),
   hideResult: () => ipcRenderer.invoke('hide-result'),
-  openMask: () => ipcRenderer.invoke('open-mask'),
+  /** Open the capture mask. target='result' routes the capture back to the chat/result window. */
+  openMask: (target?: 'main' | 'result') => ipcRenderer.invoke('open-mask', target),
   hideMask: () => ipcRenderer.invoke('hide-mask'),
   closeMask: () => ipcRenderer.invoke('close-mask'),
 

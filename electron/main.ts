@@ -27,6 +27,11 @@ let maskWin: BrowserWindow | null = null
 let tray: Tray | null = null
 let isQuitting = false
 
+// Where the currently open mask was launched from ('main' window or the
+// floating 'result' window in chat mode). Determines where a captured
+// region is routed once the user picks translate/explain.
+let maskTarget: 'main' | 'result' = 'main'
+
 const SECURE_WEB_PREFERENCES = {
   preload: PRELOAD_PATH,
   contextIsolation: true,
@@ -219,8 +224,20 @@ ipcMain.handle('maximize-window', () => {
 ipcMain.handle('close-window', () => win?.close())
 
 ipcMain.on('process-screenshot', (_event, data) => {
-  // Forward the message from mask window to the result window (chat mode)
-  // or the main window (normal processing)
+  // If the mask was opened from the result/chat window, the capture belongs
+  // to the ongoing conversation - deliver it there even if that window is
+  // currently hidden (it was hidden before opening the mask).
+  if (maskTarget === 'result') {
+    maskTarget = 'main'
+    if (resultWin && !resultWin.isDestroyed()) {
+      resultWin.show()
+      resultWin.webContents.send('append-screenshot', data)
+      return
+    }
+  }
+
+  // Otherwise forward to a visible result window (chat mode), or fall back
+  // to the main window for normal processing.
   if (resultWin && !resultWin.isDestroyed() && resultWin.isVisible()) {
     resultWin.webContents.send('append-screenshot', data)
   } else if (win && win.webContents) {
@@ -228,7 +245,8 @@ ipcMain.on('process-screenshot', (_event, data) => {
   }
 })
 
-ipcMain.handle('open-mask', () => {
+ipcMain.handle('open-mask', (_event, target?: 'main' | 'result') => {
+  maskTarget = target === 'result' ? 'result' : 'main'
   if (maskWin && !maskWin.isDestroyed()) {
     maskWin.show()
     maskWin.focus()
@@ -237,23 +255,41 @@ ipcMain.handle('open-mask', () => {
   }
 })
 
-ipcMain.handle('close-mask', () => maskWin?.destroy())
-ipcMain.handle('hide-mask', () => maskWin?.hide())
+ipcMain.handle('close-mask', () => {
+  maskTarget = 'main'
+  return maskWin?.destroy()
+})
+ipcMain.handle('hide-mask', () => {
+  maskTarget = 'main'
+  return maskWin?.hide()
+})
 
 ipcMain.handle('show-result', async (_event, { x, y, content }: { x: number; y: number; content: string }) => {
   if (!resultWin || resultWin.isDestroyed()) createResultWindow()
 
   if (resultWin?.webContents.isLoading()) {
-    await new Promise(resolve => resultWin?.webContents.once('did-finish-load', resolve))
+    await new Promise<void>(resolve => {
+      const wc = resultWin!.webContents
+      const done = () => {
+        wc.removeListener('did-fail-load', done)
+        resolve()
+      }
+      wc.once('did-finish-load', done)
+      wc.once('did-fail-load', done)
+    })
   }
 
-  // Keep the window on-screen
+  // Keep the window on-screen. x/y are global (virtual screen) coordinates,
+  // so compare against the display's workArea edges - not its width alone -
+  // to stay correct on secondary / negative-origin displays.
   const bounds = resultWin!.getBounds()
-  const display = screen.getDisplayNearestPoint({ x: Math.round(x), y: Math.round(y) })
+  const workArea = screen.getDisplayNearestPoint({ x: Math.round(x), y: Math.round(y) }).workArea
   let finalX = x
   let finalY = y
-  if (x + bounds.width > display.bounds.width) finalX = x - bounds.width - 10
-  if (y + bounds.height > display.bounds.height) finalY = display.bounds.height - bounds.height - 10
+  if (finalX + bounds.width > workArea.x + workArea.width) finalX = x - bounds.width - 10
+  if (finalX < workArea.x) finalX = workArea.x + 10
+  if (finalY + bounds.height > workArea.y + workArea.height) finalY = workArea.y + workArea.height - bounds.height - 10
+  if (finalY < workArea.y) finalY = workArea.y + 10
 
   resultWin!.setPosition(Math.round(finalX), Math.round(finalY))
   resultWin!.show()
@@ -276,13 +312,20 @@ ipcMain.handle('chat-with-ai', async (_event, messages: Array<{ role: string; co
 })
 
 ipcMain.handle('capture-screen', async () => {
-  // Capture the display under the cursor (multi-display support)
+  // Capture the display under the cursor (multi-display support):
+  // match the source by display id instead of blindly taking sources[0],
+  // and request a physical-pixel thumbnail so HiDPI (scaleFactor > 1)
+  // screens keep their native resolution for exact region cropping.
   const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
   const sources = await desktopCapturer.getSources({
     types: ['screen'],
-    thumbnailSize: display.size,
+    thumbnailSize: {
+      width: Math.round(display.size.width * display.scaleFactor),
+      height: Math.round(display.size.height * display.scaleFactor),
+    },
   })
-  return sources[0]?.thumbnail.toDataURL()
+  const matched = sources.find(source => source.display_id === String(display.id)) || sources[0]
+  return matched?.thumbnail.toDataURL()
 })
 
 ipcMain.handle('save-chat-history', async (_event, data: { messages: Array<{ role: string; content: string }>; originalContent: string }) => {
