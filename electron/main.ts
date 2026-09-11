@@ -306,10 +306,17 @@ ipcMain.handle('hide-result', () => resultWin?.hide())
 
 ipcMain.handle('chat-with-ai', async (_event, messages: Array<{ role: string; content: string }>) => {
   const settings = getSettings()
-  const isVlm = settings.mode === 'VLM'
-  const config = isVlm
-    ? { provider: settings.vlmProvider, apiKey: settings.vlmApiKey, baseUrl: settings.vlmBaseUrl, model: settings.vlmModel }
-    : { provider: settings.llmProvider, apiKey: settings.llmApiKey, baseUrl: settings.llmBaseUrl, model: settings.llmModel }
+  let config: { provider: string; apiKey: string; baseUrl: string; model: string }
+  if (settings.mode === 'TEXT') {
+    // Text mode chats through the text runner so a custom pipeline's first
+    // chat node works here too.
+    config = resolveTextRunner(settings).config
+  } else {
+    const isVlm = settings.mode === 'VLM'
+    config = isVlm
+      ? { provider: settings.vlmProvider, apiKey: settings.vlmApiKey, baseUrl: settings.vlmBaseUrl, model: settings.vlmModel }
+      : { provider: settings.llmProvider, apiKey: settings.llmApiKey, baseUrl: settings.llmBaseUrl, model: settings.llmModel }
+  }
 
   return await callAI(config, {
     prompt: messages[messages.length - 1].content,
@@ -601,6 +608,29 @@ function updateTextSelectionShortcut(settings: { enableTextSelection: boolean })
   }
 }
 
+// Alt+A is meaningless in text-only mode, so the capture hotkey follows the mode.
+let captureRegistered = false
+
+function openCaptureMask(): void {
+  if (maskWin && !maskWin.isDestroyed()) {
+    maskWin.show()
+    maskWin.focus()
+  } else {
+    createMaskWindow()
+  }
+}
+
+function updateCaptureShortcut(settings: { mode: string }): void {
+  const want = settings.mode !== 'TEXT'
+  if (want && !captureRegistered) {
+    captureRegistered = globalShortcut.register('Alt+A', openCaptureMask)
+    if (!captureRegistered) console.warn('[Main] Failed to register Alt+A; the shortcut may be taken by another app.')
+  } else if (!want && captureRegistered) {
+    globalShortcut.unregister('Alt+A')
+    captureRegistered = false
+  }
+}
+
 // ---------------------------------------------------------------------------
 // App lifecycle
 // ---------------------------------------------------------------------------
@@ -624,23 +654,18 @@ app.on('second-instance', () => {
 })
 
 app.whenReady().then(() => {
-  // Re-arm the text-selection shortcut whenever settings are saved.
-  initSettings((updated) => updateTextSelectionShortcut(updated))
+  // Re-arm the mode-dependent shortcuts whenever settings are saved.
+  initSettings((updated) => {
+    updateTextSelectionShortcut(updated)
+    updateCaptureShortcut(updated)
+  })
   updateTextSelectionShortcut(getSettings())
+  updateCaptureShortcut(getSettings())
 
   initAIService()
 
   createWindow()
   createResultWindow()
-
-  globalShortcut.register('Alt+A', () => {
-    if (maskWin && !maskWin.isDestroyed()) {
-      maskWin.show()
-      maskWin.focus()
-    } else {
-      createMaskWindow()
-    }
-  })
 
   const iconPath = path.join(process.env.PUBLIC || '', 'tray-icon.png')
   try {

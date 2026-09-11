@@ -16,7 +16,7 @@ export interface AppSettings {
   vlmExplainPrompt: string
 
   // Pipe B (OCR + LLM)
-  mode: 'VLM' | 'OCR+LLM' | 'VLM+LLM' | 'CUSTOM'
+  mode: 'VLM' | 'TEXT' | 'OCR+LLM' | 'VLM+LLM' | 'CUSTOM'
   ocrProvider: 'local' | 'ollama' | 'baidu' | 'google' | 'custom'
   ocrApiKey: string
   ocrBaseUrl: string
@@ -65,7 +65,7 @@ export interface AppSettings {
 export interface SavedConfiguration {
   id: string
   name: string
-  pipeline: 'VLM' | 'OCR+LLM' | 'VLM+LLM' | 'CUSTOM'
+  pipeline: 'VLM' | 'TEXT' | 'OCR+LLM' | 'VLM+LLM' | 'CUSTOM'
   createdAt: string
   tags: string[]
   config: {

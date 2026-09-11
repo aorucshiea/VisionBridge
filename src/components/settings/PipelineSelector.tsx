@@ -1,19 +1,21 @@
 import React from 'react'
-import { ScanEye, ScanText, Sparkles, ChevronDown } from 'lucide-react'
+import { ScanEye, MessageSquare, ChevronDown } from 'lucide-react'
 import type { PipelineMode, ThemeConfig } from '../../types'
 import { tint } from '../../theme/themes'
 import type { TFunc } from './ui'
 
-const PIPELINES: Array<{
-  mode: Exclude<PipelineMode, 'CUSTOM'>
+/**
+ * The two always-available modes. OCR+LLM / VLM+LLM stay official presets
+ * inside advanced mode; CUSTOM pipelines live in the builder.
+ */
+const MODES: Array<{
+  mode: 'VLM' | 'TEXT'
   icon: React.ReactNode
-  labelKey: 'multimodal' | 'pipelineB' | 'pipelineC'
-  descKey: 'pipelineDescVlm' | 'pipelineDescOcr' | 'pipelineDescVlmLlm'
-  label: string
+  labelKey: 'multimodal' | 'textMode'
+  descKey: 'pipelineDescVlm' | 'textModeDesc'
 }> = [
-  { mode: 'VLM', icon: <ScanEye size={15} />, labelKey: 'multimodal', label: '', descKey: 'pipelineDescVlm' },
-  { mode: 'OCR+LLM', icon: <ScanText size={15} />, labelKey: 'pipelineB', label: 'OCR + LLM', descKey: 'pipelineDescOcr' },
-  { mode: 'VLM+LLM', icon: <Sparkles size={15} />, labelKey: 'pipelineC', label: 'VLM + LLM', descKey: 'pipelineDescVlmLlm' },
+  { mode: 'VLM', icon: <ScanEye size={15} />, labelKey: 'multimodal', descKey: 'pipelineDescVlm' },
+  { mode: 'TEXT', icon: <MessageSquare size={15} />, labelKey: 'textMode', descKey: 'textModeDesc' },
 ]
 
 function Switch({ checked, onChange, label, theme }: {
@@ -44,43 +46,45 @@ function Switch({ checked, onChange, label, theme }: {
 }
 
 /**
- * Preset pipelines + the advanced-mode switch. The active preset carries its
- * own raised surface so the selection stays legible without a second accent.
+ * Mode selector (multimodal / text-only) + the advanced-mode switch.
+ * OCR+LLM and VLM+LLM live in advanced mode as official preset pipelines.
  */
 const PipelineSelector: React.FC<{
   mode: PipelineMode
   advancedMode: boolean
-  onSelect: (m: Exclude<PipelineMode, 'CUSTOM'>) => void
+  onSelect: (m: 'VLM' | 'TEXT') => void
   onToggleAdvanced: (v: boolean) => void
   theme: ThemeConfig
   t: TFunc
 }> = ({ mode, advancedMode, onSelect, onToggleAdvanced, theme, t }) => {
-  const preset: Exclude<PipelineMode, 'CUSTOM'> = mode === 'CUSTOM' ? 'VLM' : mode
-  const active = PIPELINES.find(p => p.mode === preset) || PIPELINES[0]
+  const active = MODES.find(m => m.mode === mode)
+  const descKey = active
+    ? active.descKey
+    : mode === 'CUSTOM' ? 'customPipelines' as const : 'pipelineDescOcr' as const
 
   return (
     <section className="space-y-2.5">
       <div className="flex items-baseline justify-between gap-3">
         <h2 className="eyebrow shrink-0" style={{ color: theme.textSecondary }}>{t('pipeline')}</h2>
         <p className="text-[11px] leading-relaxed text-right" style={{ color: theme.textMuted }}>
-          {mode === 'CUSTOM' ? t('customPipelines') : t(active.descKey)}
+          {t(descKey)}
         </p>
       </div>
 
       <div
         role="tablist"
         aria-label={t('pipeline')}
-        className="grid grid-cols-3 gap-1 p-1 rounded-[11px] border"
+        className="grid grid-cols-2 gap-1 p-1 rounded-[11px] border"
         style={{ backgroundColor: theme.inputBg, borderColor: theme.inputBorder }}
       >
-        {PIPELINES.map(p => {
-          const selected = mode === p.mode
+        {MODES.map(m => {
+          const selected = mode === m.mode
           return (
             <button
-              key={p.mode}
+              key={m.mode}
               role="tab"
               aria-selected={selected}
-              onClick={() => onSelect(p.mode)}
+              onClick={() => onSelect(m.mode)}
               className="flex items-center justify-center gap-1.5 py-2 rounded-[8px] text-[11px] font-semibold tracking-wide border transition-[background-color,border-color,color,transform] duration-base ease-out-quart active:scale-[0.98]"
               style={{
                 color: selected ? theme.primary : theme.textSecondary,
@@ -89,8 +93,8 @@ const PipelineSelector: React.FC<{
                 boxShadow: selected ? `0 1px 2px ${theme.hairline}` : undefined,
               }}
             >
-              {p.icon}
-              <span>{p.labelKey === 'multimodal' ? t('multimodal') : p.label}</span>
+              {m.icon}
+              <span>{t(m.labelKey)}</span>
             </button>
           )
         })}

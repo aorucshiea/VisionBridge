@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
-import { Settings as SettingsIcon, ScanLine, Save, Check, Minus, Square, X as CloseIcon } from 'lucide-react'
+import { Settings as SettingsIcon, ScanLine, MessageSquare, Save, Check, Minus, Square, X as CloseIcon } from 'lucide-react'
 import ScreenshotMask from './components/ScreenshotMask'
 import ResultView from './components/ResultView'
+import TextChat from './components/TextChat'
 import PipelineSelector from './components/settings/PipelineSelector'
 import PipelineBuilder from './components/settings/PipelineBuilder'
+import OfficialPresets from './components/settings/OfficialPresets'
 import ProviderConfigSection, { type SectionModel } from './components/settings/ProviderConfigSection'
 import ValidationCard from './components/settings/ValidationCard'
 import SavedConfigs from './components/settings/SavedConfigs'
@@ -13,7 +15,7 @@ import { translations, type TranslationDict } from './i18n'
 import { themes, tint } from './theme/themes'
 import { DEFAULT_SETTINGS } from './lib/defaults'
 import { captureRegion } from './lib/screenshot'
-import { getActiveNodes, runNodeChain, activePipeline, taskPromptsOf } from './lib/pipeline'
+import { getActiveNodes, runNodeChain, taskPromptsOf, modeLabel } from './lib/pipeline'
 import type { AppSettings, SavedConfiguration, TestTarget, TestStatus } from './types'
 
 type SectionType = 'vlm' | 'ocr' | 'llm' | 'vlm2' | 'llm2'
@@ -174,6 +176,10 @@ function App() {
     window.ipcRenderer.showResult({ x: region.x + region.width + 10, y: region.y, content: t('processing') })
 
     try {
+      if (settings.mode === 'TEXT') {
+        throw new Error(t('textModeNoCapture'))
+      }
+
       const croppedBase64 = await captureRegion(region)
 
       // Single execution path: presets resolve to node chains too, so a
@@ -378,12 +384,11 @@ function App() {
 
   const currentTheme = themes[settings.theme] || themes.light
 
-  const customActive = activePipeline(settings)
-  const pipelineLabel = settings.mode === 'CUSTOM'
-    ? (customActive?.name || 'CUSTOM')
-    : settings.mode
+  const pipelineLabel = modeLabel(settings, t)
   const chainNodes = getActiveNodes(settings) || []
-  const activeModel = chainNodes.map(n => n.model || n.kind).join(' → ')
+  const activeModel = settings.mode === 'TEXT'
+    ? settings.llmModel
+    : chainNodes.map(n => n.model || n.kind).join(' → ')
 
   const renderSection = (type: SectionType) => {
     const v = SECTION_VARIANTS[type]
@@ -440,8 +445,12 @@ function App() {
     '--sweep-color': currentTheme.primary,
   } as CSSProperties
 
+  const textMode = settings.mode === 'TEXT'
+
   const tabs: Array<{ id: 'translate' | 'settings'; icon: ReactNode; label: string }> = [
-    { id: 'translate', icon: <ScanLine size={15} />, label: t('screenshot') },
+    textMode
+      ? { id: 'translate', icon: <MessageSquare size={15} />, label: t('chat') }
+      : { id: 'translate', icon: <ScanLine size={15} />, label: t('screenshot') },
     { id: 'settings', icon: <SettingsIcon size={15} />, label: t('settings') },
   ]
 
@@ -535,6 +544,11 @@ function App() {
         style={{ backgroundColor: currentTheme.background }}
       >
         {activeTab === 'translate' ? (
+          textMode ? (
+            <div className="h-full flex flex-col px-4 pt-3 pb-3 animate-rise">
+              <TextChat theme={currentTheme} t={t} />
+            </div>
+          ) : (
           <div className="h-full min-h-[320px] flex flex-col items-center justify-center px-7 animate-rise">
             <div
               className="w-full max-w-[268px] flex flex-col items-center text-center"
@@ -577,6 +591,7 @@ function App() {
               </div>
             </div>
           </div>
+          )
         ) : (
           <div className="mx-auto w-full max-w-[560px] px-5 pt-5 pb-8 space-y-5 animate-rise">
             <PipelineSelector
@@ -587,6 +602,15 @@ function App() {
               theme={currentTheme}
               t={t}
             />
+
+            {settings.advancedMode && (
+              <OfficialPresets
+                mode={settings.mode}
+                onSelect={(m) => setSettings(prev => ({ ...prev, mode: m }))}
+                theme={currentTheme}
+                t={t}
+              />
+            )}
 
             {settings.advancedMode && (
               <PipelineBuilder
@@ -612,6 +636,8 @@ function App() {
             )}
 
             {settings.mode === 'VLM' && renderSection('vlm')}
+
+            {settings.mode === 'TEXT' && renderSection('llm')}
 
             {settings.mode === 'OCR+LLM' && (
               <div className="space-y-5">
@@ -718,6 +744,10 @@ function App() {
             )}
             {saveStatus === 'idle' ? t('save') : saveStatus === 'saving' ? t('saving') : t('saved')}
           </button>
+        ) : textMode ? (
+          <span className="text-[11px]" style={{ color: currentTheme.textMuted }}>
+            {t('textMode')}
+          </span>
         ) : (
           <span className="text-[11px]" style={{ color: currentTheme.textMuted }}>
             <span className="kbd">Alt</span> <span>+</span> <span className="kbd">A</span>

@@ -1,4 +1,4 @@
-export type PipelineMode = 'VLM' | 'OCR+LLM' | 'VLM+LLM' | 'CUSTOM'
+export type PipelineMode = 'VLM' | 'TEXT' | 'OCR+LLM' | 'VLM+LLM' | 'CUSTOM'
 
 /**
  * How a node talks to its endpoint. Drives both the wire format in the main

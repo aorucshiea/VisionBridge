@@ -180,6 +180,7 @@ export function presetNodes(settings: AppSettings): Record<'VLM' | 'OCR+LLM' | '
 
 /** The node chain the current settings point at, or null when nothing applies. */
 export function getActiveNodes(settings: AppSettings): PipelineNode[] | null {
+  if (settings.mode === 'TEXT') return null // text mode never runs screenshot chains
   if (settings.mode === 'CUSTOM') {
     const pipeline = (settings.pipelines || []).find(p => p.id === settings.activePipelineId)
     if (!pipeline) return null
@@ -192,6 +193,14 @@ export function getActiveNodes(settings: AppSettings): PipelineNode[] | null {
 export function activePipeline(settings: AppSettings): Pipeline | null {
   if (settings.mode !== 'CUSTOM') return null
   return (settings.pipelines || []).find(p => p.id === settings.activePipelineId) || null
+}
+
+/** Human-readable name for the current mode (footer, translate tab). */
+export function modeLabel(settings: AppSettings, t: (k: keyof TranslationDict) => string): string {
+  if (settings.mode === 'CUSTOM') return activePipeline(settings)?.name || 'CUSTOM'
+  if (settings.mode === 'TEXT') return t('textMode')
+  if (settings.mode === 'VLM') return t('multimodal')
+  return settings.mode
 }
 
 export function taskPromptsOf(settings: AppSettings): TaskPrompts {

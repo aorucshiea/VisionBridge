@@ -28,7 +28,7 @@ app.commandLine.appendSwitch('no-sandbox')
 app.commandLine.appendSwitch('disable-dev-shm-usage')
 
 const SETTINGS = {
-  mode: 'OCR+LLM',
+  mode: 'VLM',
   theme: 'light',
   language: 'zh',
   vlmProvider: 'openai',
@@ -234,6 +234,12 @@ async function main() {
   await load(customWin, '?window=main')
   await shoot(customWin, 'main-custom')
   customWin.destroy()
+
+  // 3e — text-only mode: the capture tab becomes a chat
+  const textWin = await makeWindow({ width: 450, height: 650, theme: 'light', overrides: { mode: 'TEXT' } })
+  await load(textWin, '?window=main')
+  await shoot(textWin, 'main-text')
+  textWin.destroy()
 
   // 4 — dark palette
   const darkWin = await makeWindow({ width: 450, height: 650, theme: 'dark' })
