@@ -115,6 +115,42 @@ export interface TranslationDict {
   translate: string
   explain: string
   cancel: string
+  advancedMode: string
+  advancedModeDesc: string
+  multimodal: string
+  customPipelines: string
+  newPipeline: string
+  editPipeline: string
+  pipelineName: string
+  placeholderPipelineName: string
+  addNode: string
+  nodeCategories: string
+  moveUp: string
+  moveDown: string
+  usePipeline: string
+  inUse: string
+  noPipelines: string
+  noPipelinesHint: string
+  kindVlm: string
+  kindLlm: string
+  kindOcr: string
+  kindAsr: string
+  kindTts: string
+  kindImagegen: string
+  kindCustom: string
+  newNodeKind: string
+  newNodeKindLabel: string
+  newNodeKindApi: string
+  nodePrompt: string
+  nodePromptExplain: string
+  nodePromptHint: string
+  voice: string
+  savePipeline: string
+  confirmDeletePipeline: string
+  pipelineNeedsName: string
+  pipelineNeedsNode: string
+  pipelineSaved: string
+  customPipelineActive: string
 }
 
 export const translations: Record<'zh' | 'en', TranslationDict> = {
@@ -235,6 +271,42 @@ export const translations: Record<'zh' | 'en', TranslationDict> = {
     translate: '翻译',
     explain: '解释',
     cancel: '取消',
+    advancedMode: '高级模式',
+    advancedModeDesc: '自定义节点与管道',
+    multimodal: '多模态',
+    customPipelines: '自定义管道',
+    newPipeline: '新建管道',
+    editPipeline: '编辑管道',
+    pipelineName: '管道名称',
+    placeholderPipelineName: '例如：截图转语音',
+    addNode: '添加节点',
+    nodeCategories: '节点类别',
+    moveUp: '上移',
+    moveDown: '下移',
+    usePipeline: '启用',
+    inUse: '使用中',
+    noPipelines: '还没有自定义管道',
+    noPipelinesHint: '把 VLM、LLM、OCR、TTS 等节点串成自己的管道，支持单节点或多节点',
+    kindVlm: '视觉语言模型',
+    kindLlm: '语言模型',
+    kindOcr: '文字识别',
+    kindAsr: '语音识别',
+    kindTts: '语音合成',
+    kindImagegen: '图像生成',
+    kindCustom: '自定义',
+    newNodeKind: '新建节点类别',
+    newNodeKindLabel: '类别名称',
+    newNodeKindApi: '接口形态',
+    nodePrompt: '节点提示词',
+    nodePromptExplain: '解释提示词（可选覆盖）',
+    nodePromptHint: '支持 {input} 占位符接收上一步输出，留空使用默认',
+    voice: '音色',
+    savePipeline: '保存管道',
+    confirmDeletePipeline: '确定删除这个管道吗？',
+    pipelineNeedsName: '请先给管道起个名字',
+    pipelineNeedsNode: '管道至少要有一个启用的节点',
+    pipelineSaved: '管道已保存',
+    customPipelineActive: '正在使用自定义管道，预设配置已暂停生效',
   },
   en: {
     title: 'Vision Bridge',
@@ -281,7 +353,7 @@ export const translations: Record<'zh' | 'en', TranslationDict> = {
     delete: 'Delete',
     features: 'Features',
     textSelection: 'Text Selection',
-    textSelectionDesc: 'Auto-translate selected text',
+    textSelectionDesc: 'Select text, then press Alt+T to translate',
     appearance: 'Appearance',
     theme: 'Theme',
     language: 'Language',
@@ -353,5 +425,41 @@ export const translations: Record<'zh' | 'en', TranslationDict> = {
     translate: 'Translate',
     explain: 'Explain',
     cancel: 'Cancel',
+    advancedMode: 'Advanced',
+    advancedModeDesc: 'Compose nodes into custom pipelines',
+    multimodal: 'Multimodal',
+    customPipelines: 'Custom Pipelines',
+    newPipeline: 'New Pipeline',
+    editPipeline: 'Edit Pipeline',
+    pipelineName: 'Pipeline name',
+    placeholderPipelineName: 'e.g. Screenshot to speech',
+    addNode: 'Add node',
+    nodeCategories: 'Node categories',
+    moveUp: 'Move up',
+    moveDown: 'Move down',
+    usePipeline: 'Use',
+    inUse: 'Active',
+    noPipelines: 'No custom pipelines yet',
+    noPipelinesHint: 'Chain VLM, LLM, OCR, TTS and more into your own pipeline — single or multi node',
+    kindVlm: 'Vision-Language Model',
+    kindLlm: 'Language Model',
+    kindOcr: 'OCR',
+    kindAsr: 'Speech-to-Text',
+    kindTts: 'Text-to-Speech',
+    kindImagegen: 'Image Generation',
+    kindCustom: 'Custom',
+    newNodeKind: 'New node kind',
+    newNodeKindLabel: 'Kind name',
+    newNodeKindApi: 'Wire format',
+    nodePrompt: 'Node prompt',
+    nodePromptExplain: 'Explain prompt (optional override)',
+    nodePromptHint: 'Supports the {input} placeholder; leave empty for defaults',
+    voice: 'Voice',
+    savePipeline: 'Save pipeline',
+    confirmDeletePipeline: 'Delete this pipeline?',
+    pipelineNeedsName: 'Name the pipeline first',
+    pipelineNeedsNode: 'Add at least one enabled node',
+    pipelineSaved: 'Pipeline saved',
+    customPipelineActive: 'Using a custom pipeline — preset sections are paused',
   },
 }

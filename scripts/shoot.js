@@ -62,7 +62,24 @@ const SETTINGS = {
   trayIconPath: '',
   savedConfigurations: [],
   showCloseConfirm: true,
+  advancedMode: false,
+  pipelines: [],
+  activePipelineId: null,
+  customNodeKinds: [],
 }
+
+// A demo custom pipeline for the advanced-mode captures: OCR → LLM → TTS.
+const DEMO_PIPELINE = {
+  id: 'p-demo',
+  name: '截图转语音',
+  createdAt: '2026-09-11T00:00:00.000Z',
+  nodes: [
+    { id: 'd1', kind: 'ocr', provider: 'custom', baseUrl: 'https://api.deepseek.com', model: 'deepseek-ai/DeepSeek-OCR', apiKey: '', api: 'ocr', prompt: '', promptExplain: '', enabled: true },
+    { id: 'd2', kind: 'llm', provider: 'custom', baseUrl: 'https://api.deepseek.com', model: 'deepseek-chat', apiKey: '', api: 'chat', prompt: '把下面的文字翻译成地道的英文，只输出译文：\n\n{input}', promptExplain: '', enabled: true },
+    { id: 'd3', kind: 'tts', provider: 'custom', baseUrl: 'https://api.openai.com', model: 'tts-1', apiKey: '', api: 'tts', prompt: '', promptExplain: '', voice: 'alloy', enabled: true },
+  ],
+}
+const DEMO_KINDS = [{ id: 'k-intent', label: '意图分类', api: 'chat' }]
 
 let activeSettings = SETTINGS
 ipcMain.handle('get-settings', () => activeSettings)
@@ -131,8 +148,8 @@ async function shoot(win, name) {
 
 let windowSlot = 0
 
-async function makeWindow({ width, height, transparent = false, theme }) {
-  activeSettings = { ...SETTINGS, theme }
+async function makeWindow({ width, height, transparent = false, theme, overrides = {} }) {
+  activeSettings = { ...SETTINGS, theme, ...overrides }
   const x = 40 + (windowSlot % 4) * 30
   const y = 40 + (windowSlot % 4) * 30
   windowSlot += 1
@@ -171,10 +188,17 @@ async function main() {
   await load(mainWin, '?window=main')
   await shoot(mainWin, 'main-paper')
 
-  // 2 — settings tab
-  await mainWin.webContents.executeJavaScript(`
-    (() => { const tabs = document.querySelectorAll('[role=tab]'); tabs[tabs.length - 1].click(); return true })()
+  // 2 — settings tab (matched by title so this works across UI revisions)
+  const clicked = await mainWin.webContents.executeJavaScript(`
+    (() => {
+      const btn = [...document.querySelectorAll('button')]
+        .find(b => b.title === '设置' || b.title === 'Settings');
+      if (!btn) return false;
+      btn.click();
+      return true;
+    })()
   `)
+  if (!clicked) throw new Error('settings tab button not found')
   await wait(500)
   await shoot(mainWin, 'settings-paper')
 
@@ -183,6 +207,33 @@ async function main() {
   await wait(600)
   await shoot(mainWin, 'settings-paper-full')
   mainWin.destroy()
+
+  // 3b — advanced mode: preset selector + custom pipeline list
+  const ADVANCED = { advancedMode: true, pipelines: [DEMO_PIPELINE], customNodeKinds: DEMO_KINDS }
+  const advWin = await makeWindow({ width: 450, height: 1560, theme: 'light', overrides: ADVANCED })
+  await load(advWin, '?window=main')
+  await advWin.webContents.executeJavaScript(`
+    [...document.querySelectorAll('button')].find(b => b.title === '设置' || b.title === 'Settings')?.click(); true
+  `)
+  await wait(600)
+  await shoot(advWin, 'settings-advanced')
+
+  // 3c — the pipeline editor with the node palette open
+  await advWin.webContents.executeJavaScript(`
+    [...document.querySelectorAll('button')].find(b => b.textContent.includes('新建管道'))?.click(); true
+  `)
+  await wait(500)
+  await shoot(advWin, 'pipeline-editor')
+  advWin.destroy()
+
+  // 3d — main window running a custom pipeline (name shows in the footer)
+  const customWin = await makeWindow({
+    width: 450, height: 650, theme: 'light',
+    overrides: { ...ADVANCED, mode: 'CUSTOM', activePipelineId: 'p-demo' },
+  })
+  await load(customWin, '?window=main')
+  await shoot(customWin, 'main-custom')
+  customWin.destroy()
 
   // 4 — dark palette
   const darkWin = await makeWindow({ width: 450, height: 650, theme: 'dark' })

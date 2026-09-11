@@ -4,6 +4,7 @@ import { Settings as SettingsIcon, ScanLine, Save, Check, Minus, Square, X as Cl
 import ScreenshotMask from './components/ScreenshotMask'
 import ResultView from './components/ResultView'
 import PipelineSelector from './components/settings/PipelineSelector'
+import PipelineBuilder from './components/settings/PipelineBuilder'
 import ProviderConfigSection, { type SectionModel } from './components/settings/ProviderConfigSection'
 import ValidationCard from './components/settings/ValidationCard'
 import SavedConfigs from './components/settings/SavedConfigs'
@@ -12,7 +13,8 @@ import { translations, type TranslationDict } from './i18n'
 import { themes, tint } from './theme/themes'
 import { DEFAULT_SETTINGS } from './lib/defaults'
 import { captureRegion } from './lib/screenshot'
-import type { AppSettings, PipelineMode, SavedConfiguration, TestTarget, TestStatus } from './types'
+import { getActiveNodes, runNodeChain, activePipeline, taskPromptsOf } from './lib/pipeline'
+import type { AppSettings, SavedConfiguration, TestTarget, TestStatus } from './types'
 
 type SectionType = 'vlm' | 'ocr' | 'llm' | 'vlm2' | 'llm2'
 
@@ -174,47 +176,19 @@ function App() {
     try {
       const croppedBase64 = await captureRegion(region)
 
-      let result = ''
-      if (settings.mode === 'VLM') {
-        result = await window.ipcRenderer.callAI({
-          provider: settings.vlmProvider, apiKey: settings.vlmApiKey,
-          baseUrl: settings.vlmBaseUrl, model: settings.vlmModel,
-        }, {
-          prompt: mode === 'translate' ? settings.vlmTranslatePrompt : settings.vlmExplainPrompt,
-          images: [croppedBase64],
-        })
-      } else if (settings.mode === 'OCR+LLM') {
-        const ocrText = await window.ipcRenderer.callOCR({
-          provider: settings.ocrProvider, apiKey: settings.ocrApiKey,
-          baseUrl: settings.ocrBaseUrl, model: settings.ocrModel,
-        }, croppedBase64)
-
-        if (!ocrText || ocrText.trim().length === 0) {
-          throw new Error(t('ocrNoText'))
-        }
-
-        result = await window.ipcRenderer.callAI({
-          provider: settings.llmProvider, apiKey: settings.llmApiKey,
-          baseUrl: settings.llmBaseUrl, model: settings.llmModel,
-        }, {
-          prompt: (mode === 'translate' ? settings.llmTranslatePrompt : settings.llmExplainPrompt) + "\n\n" + ocrText,
-        })
-      } else if (settings.mode === 'VLM+LLM') {
-        const jsonData = await window.ipcRenderer.callAI({
-          provider: settings.vlm2Provider, apiKey: settings.vlm2ApiKey,
-          baseUrl: settings.vlm2BaseUrl, model: settings.vlm2Model,
-        }, {
-          prompt: settings.vlm2JsonPrompt,
-          images: [croppedBase64],
-        })
-
-        result = await window.ipcRenderer.callAI({
-          provider: settings.llm2Provider, apiKey: settings.llm2ApiKey,
-          baseUrl: settings.llm2BaseUrl, model: settings.llm2Model,
-        }, {
-          prompt: (mode === 'translate' ? settings.llm2TranslatePrompt : settings.llm2ExplainPrompt).replace('{json_data}', jsonData),
-        })
+      // Single execution path: presets resolve to node chains too, so a
+      // two-node custom pipeline and the plain VLM preset share one engine.
+      const nodes = getActiveNodes(settings)
+      if (!nodes || nodes.length === 0) {
+        throw new Error(t('pipelineNeedsNode'))
       }
+
+      const { content: result } = await runNodeChain({
+        nodes,
+        image: croppedBase64,
+        task: mode,
+        taskPrompts: taskPromptsOf(settings),
+      })
 
       if (!abortController.signal.aborted) {
         window.ipcRenderer.showResult({ x: region.x + region.width + 10, y: region.y, content: result })
@@ -404,11 +378,12 @@ function App() {
 
   const currentTheme = themes[settings.theme] || themes.light
 
-  const activeModel = settings.mode === 'VLM'
-    ? settings.vlmModel
-    : settings.mode === 'OCR+LLM'
-      ? settings.ocrModel
-      : settings.vlm2Model
+  const customActive = activePipeline(settings)
+  const pipelineLabel = settings.mode === 'CUSTOM'
+    ? (customActive?.name || 'CUSTOM')
+    : settings.mode
+  const chainNodes = getActiveNodes(settings) || []
+  const activeModel = chainNodes.map(n => n.model || n.kind).join(' → ')
 
   const renderSection = (type: SectionType) => {
     const v = SECTION_VARIANTS[type]
@@ -595,7 +570,7 @@ function App() {
 
               <div className="mt-6 w-full pt-4 border-t" style={{ borderColor: currentTheme.hairline }}>
                 <p className="eyebrow mb-1.5" style={{ color: currentTheme.textMuted }}>{t('pipeline')}</p>
-                <p className="text-[12px] font-semibold" style={{ color: currentTheme.text }}>{settings.mode}</p>
+                <p className="text-[12px] font-semibold" style={{ color: currentTheme.text }}>{pipelineLabel}</p>
                 <p className="mt-1 text-[11px] leading-relaxed truncate" style={{ color: currentTheme.textSecondary }} title={activeModel}>
                   {activeModel || '—'}
                 </p>
@@ -604,7 +579,37 @@ function App() {
           </div>
         ) : (
           <div className="mx-auto w-full max-w-[560px] px-5 pt-5 pb-8 space-y-5 animate-rise">
-            <PipelineSelector mode={settings.mode} onSelect={(m: PipelineMode) => setSettings(prev => ({ ...prev, mode: m }))} theme={currentTheme} t={t} />
+            <PipelineSelector
+              mode={settings.mode}
+              advancedMode={settings.advancedMode}
+              onSelect={(m) => setSettings(prev => ({ ...prev, mode: m }))}
+              onToggleAdvanced={(v) => setSettings(prev => ({ ...prev, advancedMode: v }))}
+              theme={currentTheme}
+              t={t}
+            />
+
+            {settings.advancedMode && (
+              <PipelineBuilder
+                settings={settings}
+                onPatch={(patch) => setSettings(prev => ({ ...prev, ...patch }))}
+                onNotify={tell}
+                theme={currentTheme}
+                t={t}
+              />
+            )}
+
+            {settings.mode === 'CUSTOM' && !settings.advancedMode && (
+              <div
+                className="px-4 py-3 rounded-card border text-[11.5px] leading-relaxed"
+                style={{
+                  backgroundColor: tint(currentTheme.primary, currentTheme.card, 0.06),
+                  borderColor: tint(currentTheme.primary, currentTheme.card, 0.24),
+                  color: currentTheme.textSecondary,
+                }}
+              >
+                {t('customPipelineActive')}
+              </div>
+            )}
 
             {settings.mode === 'VLM' && renderSection('vlm')}
 
@@ -687,7 +692,7 @@ function App() {
             style={{ backgroundColor: saveStatus === 'saved' ? currentTheme.success : tint(currentTheme.text, currentTheme.card, 0.28) }}
           />
           <span className="shrink-0">{t('statusPipeline')}</span>
-          <span className="font-semibold" style={{ color: currentTheme.textSecondary }}>{settings.mode}</span>
+          <span className="font-semibold" style={{ color: currentTheme.textSecondary }}>{pipelineLabel}</span>
           <span aria-hidden style={{ color: currentTheme.border }}>·</span>
           <span className="font-mono truncate max-w-[150px]" title={activeModel}>{activeModel || '—'}</span>
         </div>

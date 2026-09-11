@@ -1,6 +1,7 @@
-import { app, BrowserWindow, globalShortcut, Tray, Menu, ipcMain, desktopCapturer, screen, dialog } from 'electron'
+import { app, BrowserWindow, globalShortcut, Tray, Menu, ipcMain, desktopCapturer, screen, dialog, clipboard } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
+import { spawn } from 'node:child_process'
 import axios from 'axios'
 import { initSettings, getSettings, writeSettings } from './settings'
 import { initAIService, callAI } from './ai'
@@ -264,7 +265,8 @@ ipcMain.handle('hide-mask', () => {
   return maskWin?.hide()
 })
 
-ipcMain.handle('show-result', async (_event, { x, y, content }: { x: number; y: number; content: string }) => {
+/** Shared result-window positioning: keep the card on-screen near a point. */
+async function showResultWindow(x: number, y: number, content: string): Promise<void> {
   if (!resultWin || resultWin.isDestroyed()) createResultWindow()
 
   if (resultWin?.webContents.isLoading()) {
@@ -294,6 +296,10 @@ ipcMain.handle('show-result', async (_event, { x, y, content }: { x: number; y: 
   resultWin!.setPosition(Math.round(finalX), Math.round(finalY))
   resultWin!.show()
   resultWin!.webContents.send('display-content', content)
+}
+
+ipcMain.handle('show-result', async (_event, { x, y, content }: { x: number; y: number; content: string }) => {
+  await showResultWindow(x, y, content)
 })
 
 ipcMain.handle('hide-result', () => resultWin?.hide())
@@ -493,6 +499,109 @@ ipcMain.handle('test-connection', async (_event, config: any) => {
 })
 
 // ---------------------------------------------------------------------------
+// Text selection (划词翻译): Alt+T copies the current selection via a
+// simulated Ctrl+C, reads the clipboard, then runs the text side of the
+// active pipeline in a result card next to the cursor.
+// ---------------------------------------------------------------------------
+const TEXT_SELECTION_ACCELERATOR = 'Alt+T'
+let textSelectionRegistered = false
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+/** Send Ctrl+C to the foreground window so the selection lands in the clipboard. */
+function simulateCopy(): Promise<void> {
+  return new Promise(resolve => {
+    if (process.platform !== 'win32') { resolve(); return }
+    const child = spawn('powershell.exe', [
+      '-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden',
+      '-Command', 'Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait(\'^c\')',
+    ], { windowsHide: true, stdio: 'ignore' })
+    let settled = false
+    const finish = () => { if (!settled) { settled = true; resolve() } }
+    child.on('close', finish)
+    child.on('error', finish)
+    setTimeout(finish, 1500) // hard cap: a hung shell must never wedge the shortcut
+  })
+}
+
+/**
+ * Config + prompt builder for a text-only run: prefer the first chat node of
+ * the active custom pipeline, otherwise the preset LLM fields.
+ */
+function resolveTextRunner(settings: ReturnType<typeof getSettings>): {
+  config: { provider: string; apiKey: string; baseUrl: string; model: string }
+  promptFor: (task: 'translate' | 'explain', text: string) => string
+} {
+  if (settings.mode === 'CUSTOM') {
+    const pipeline = (settings.pipelines || []).find(p => p.id === settings.activePipelineId)
+    const node = (pipeline?.nodes || []).find(n => n.enabled && n.api === 'chat')
+    if (node) {
+      return {
+        config: { provider: node.provider, apiKey: node.apiKey, baseUrl: node.baseUrl, model: node.model },
+        promptFor: (task, text) => {
+          const template = task === 'explain' && node.promptExplain?.trim() ? node.promptExplain : node.prompt
+          const base = template.trim() !== ''
+            ? template
+            : (task === 'explain' ? settings.llmExplainPrompt : settings.llmTranslatePrompt)
+          return base.includes('{input}') ? base.replace('{input}', text) : `${base}\n\n${text}`
+        },
+      }
+    }
+  }
+  if (settings.mode === 'VLM+LLM') {
+    return {
+      config: { provider: settings.llm2Provider, apiKey: settings.llm2ApiKey, baseUrl: settings.llm2BaseUrl, model: settings.llm2Model },
+      promptFor: (task, text) => (task === 'explain' ? settings.llm2ExplainPrompt : settings.llm2TranslatePrompt).replace('{json_data}', text),
+    }
+  }
+  return {
+    config: { provider: settings.llmProvider, apiKey: settings.llmApiKey, baseUrl: settings.llmBaseUrl, model: settings.llmModel },
+    promptFor: (task, text) => `${task === 'explain' ? settings.llmExplainPrompt : settings.llmTranslatePrompt}\n\n${text}`,
+  }
+}
+
+async function handleTextSelection(): Promise<void> {
+  try {
+    const settings = getSettings()
+    const point = screen.getCursorScreenPoint()
+    const working = settings.language === 'en' ? 'Translating...' : '翻译中...'
+
+    const previous = clipboard.readText()
+    clipboard.writeText('')           // clear so a failed copy is detectable
+    await simulateCopy()
+    await delay(260)
+    const text = clipboard.readText().trim()
+    clipboard.writeText(previous)     // always restore the user's clipboard
+    if (!text) return                 // nothing selected — stay quiet
+
+    await showResultWindow(point.x + 12, point.y + 12, working)
+    const runner = resolveTextRunner(settings)
+    const result = await callAI(runner.config, { prompt: runner.promptFor('translate', text) })
+    await showResultWindow(point.x + 12, point.y + 12, result)
+  } catch (error: any) {
+    console.error('[Main] Text selection failed:', error)
+    const point = screen.getCursorScreenPoint()
+    await showResultWindow(point.x + 12, point.y + 12, `Error: ${error?.message || error}`).catch(() => {})
+  }
+}
+
+function updateTextSelectionShortcut(settings: { enableTextSelection: boolean }): void {
+  if (settings.enableTextSelection && !textSelectionRegistered) {
+    const ok = globalShortcut.register(TEXT_SELECTION_ACCELERATOR, () => { void handleTextSelection() })
+    if (ok) {
+      textSelectionRegistered = true
+    } else {
+      console.warn(`[Main] Failed to register ${TEXT_SELECTION_ACCELERATOR}; the shortcut may be taken by another app.`)
+    }
+  } else if (!settings.enableTextSelection && textSelectionRegistered) {
+    globalShortcut.unregister(TEXT_SELECTION_ACCELERATOR)
+    textSelectionRegistered = false
+  }
+}
+
+// ---------------------------------------------------------------------------
 // App lifecycle
 // ---------------------------------------------------------------------------
 app.on('window-all-closed', () => {
@@ -515,7 +624,10 @@ app.on('second-instance', () => {
 })
 
 app.whenReady().then(() => {
-  initSettings()
+  // Re-arm the text-selection shortcut whenever settings are saved.
+  initSettings((updated) => updateTextSelectionShortcut(updated))
+  updateTextSelectionShortcut(getSettings())
+
   initAIService()
 
   createWindow()

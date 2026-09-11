@@ -40,6 +40,9 @@ const api = {
   // AI
   callAI: (config: any, payload: any) => ipcRenderer.invoke('call-ai', config, payload),
   callOCR: (config: any, imageBase64: string) => ipcRenderer.invoke('call-ocr', config, imageBase64),
+  callImageGen: (config: any, prompt: string) => ipcRenderer.invoke('call-image-gen', config, prompt),
+  callTTS: (config: any, text: string) => ipcRenderer.invoke('call-tts', config, text),
+  callASR: (config: any, audioBase64: string) => ipcRenderer.invoke('call-asr', config, audioBase64),
   cancelAiRequests: () => ipcRenderer.invoke('cancel-ai-requests'),
   chatWithAI: (messages: Array<{ role: string; content: string }>) => ipcRenderer.invoke('chat-with-ai', messages),
   testConnection: (config: any, type: 'vlm' | 'ocr' | 'llm' | 'vlm2' | 'llm2') =>

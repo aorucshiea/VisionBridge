@@ -16,7 +16,7 @@ export interface AppSettings {
   vlmExplainPrompt: string
 
   // Pipe B (OCR + LLM)
-  mode: 'VLM' | 'OCR+LLM' | 'VLM+LLM'
+  mode: 'VLM' | 'OCR+LLM' | 'VLM+LLM' | 'CUSTOM'
   ocrProvider: 'local' | 'ollama' | 'baidu' | 'google' | 'custom'
   ocrApiKey: string
   ocrBaseUrl: string
@@ -44,6 +44,12 @@ export interface AppSettings {
   // Text Selection Feature
   enableTextSelection: boolean
 
+  // Node-based pipelines (advanced mode)
+  advancedMode: boolean
+  pipelines: Array<{ id: string; name: string; createdAt: string; nodes: Array<any> }>
+  activePipelineId: string | null
+  customNodeKinds: Array<{ id: string; label: string; api: string }>
+
   // Tray Icon
   trayIconPath: string
 
@@ -59,7 +65,7 @@ export interface AppSettings {
 export interface SavedConfiguration {
   id: string
   name: string
-  pipeline: 'VLM' | 'OCR+LLM' | 'VLM+LLM'
+  pipeline: 'VLM' | 'OCR+LLM' | 'VLM+LLM' | 'CUSTOM'
   createdAt: string
   tags: string[]
   config: {
@@ -107,7 +113,7 @@ export function writeSettings(settings: AppSettings): void {
   fs.renameSync(tmpPath, SETTINGS_PATH)
 }
 
-export function initSettings() {
+export function initSettings(onSaved?: (settings: AppSettings) => void) {
   ensureSettingsFile()
 
   ipcMain.handle('get-settings', () => getSettings())
@@ -115,6 +121,7 @@ export function initSettings() {
   ipcMain.handle('save-settings', (_e, settings: AppSettings) => {
     try {
       writeSettings({ ...defaultSettings, ...settings })
+      onSaved?.(getSettings())
       return { success: true }
     } catch (e: any) {
       return { success: false, error: e?.message || 'Unknown error' }

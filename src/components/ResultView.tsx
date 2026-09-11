@@ -2,12 +2,44 @@ import React, { useEffect, useRef, useState } from 'react'
 import { ArrowUp, Check, Copy, Image as ImageIcon, MessageSquare, X } from 'lucide-react'
 import { useTranslation } from '../hooks/useTranslation'
 import { captureRegion } from '../lib/screenshot'
+import { getActiveNodes, runNodeChain, taskPromptsOf, IMAGE_MARKER_RE } from '../lib/pipeline'
 import { themes, tint } from '../theme/themes'
 import type { ThemeConfig } from '../types'
 
 interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
+}
+
+/**
+ * Renders result text, expanding `[[vbimg:…]]` markers (produced by image
+ * generation nodes) into actual images.
+ */
+function RichContent({ text }: { text: string }) {
+  const parts: Array<{ type: 'text' | 'img'; value: string }> = []
+  let last = 0
+  for (const m of text.matchAll(IMAGE_MARKER_RE)) {
+    const idx = m.index ?? 0
+    if (idx > last) parts.push({ type: 'text', value: text.slice(last, idx) })
+    parts.push({ type: 'img', value: m[1] })
+    last = idx + m[0].length
+  }
+  if (last < text.length) parts.push({ type: 'text', value: text.slice(last) })
+  return (
+    <>
+      {parts.map((p, i) => p.type === 'text' ? (
+        <span key={i} className="whitespace-pre-wrap break-words">{p.value}</span>
+      ) : (
+        <img
+          key={i}
+          src={p.value}
+          alt=""
+          className="block my-2 max-w-full rounded-lg border"
+          style={{ borderColor: 'rgba(0,0,0,0.1)' }}
+        />
+      ))}
+    </>
+  )
 }
 
 /** The app mark, repeated so the floating card is identifiable at a glance. */
@@ -109,57 +141,16 @@ const ResultView: React.FC = () => {
       const croppedBase64 = await captureRegion(region)
       const currentSettings = await ipc.getSettings()
 
-      let result = ''
-      if (currentSettings.mode === 'VLM') {
-        result = await ipc.callAI({
-          provider: currentSettings.vlmProvider,
-          apiKey: currentSettings.vlmApiKey,
-          baseUrl: currentSettings.vlmBaseUrl,
-          model: currentSettings.vlmModel,
-        }, {
-          prompt: mode === 'translate' ? currentSettings.vlmTranslatePrompt : currentSettings.vlmExplainPrompt,
-          images: [croppedBase64],
-        })
-      } else if (currentSettings.mode === 'OCR+LLM') {
-        const ocrText = await ipc.callOCR({
-          provider: currentSettings.ocrProvider,
-          apiKey: currentSettings.ocrApiKey,
-          baseUrl: currentSettings.ocrBaseUrl,
-          model: currentSettings.ocrModel,
-        }, croppedBase64)
+      // Chat mode shares the same node-chain engine as the main window.
+      const nodes = getActiveNodes(currentSettings)
+      if (!nodes || nodes.length === 0) throw new Error(t('pipelineNeedsNode'))
 
-        if (!ocrText || ocrText.trim().length === 0) {
-          throw new Error(t('ocrNoText'))
-        }
-
-        result = await ipc.callAI({
-          provider: currentSettings.llmProvider,
-          apiKey: currentSettings.llmApiKey,
-          baseUrl: currentSettings.llmBaseUrl,
-          model: currentSettings.llmModel,
-        }, {
-          prompt: (mode === 'translate' ? currentSettings.llmTranslatePrompt : currentSettings.llmExplainPrompt) + "\n\n选区文字如下：\n" + ocrText,
-        })
-      } else if (currentSettings.mode === 'VLM+LLM') {
-        const jsonData = await ipc.callAI({
-          provider: currentSettings.vlm2Provider,
-          apiKey: currentSettings.vlm2ApiKey,
-          baseUrl: currentSettings.vlm2BaseUrl,
-          model: currentSettings.vlm2Model,
-        }, {
-          prompt: currentSettings.vlm2JsonPrompt,
-          images: [croppedBase64],
-        })
-
-        result = await ipc.callAI({
-          provider: currentSettings.llm2Provider,
-          apiKey: currentSettings.llm2ApiKey,
-          baseUrl: currentSettings.llm2BaseUrl,
-          model: currentSettings.llm2Model,
-        }, {
-          prompt: (mode === 'translate' ? currentSettings.llm2TranslatePrompt : currentSettings.llm2ExplainPrompt).replace('{json_data}', jsonData),
-        })
-      }
+      const { content: result } = await runNodeChain({
+        nodes,
+        image: croppedBase64,
+        task: mode,
+        taskPrompts: taskPromptsOf(currentSettings),
+      })
 
       setMessages(prev => {
         const newMessages = [...prev]
@@ -315,7 +306,9 @@ const ResultView: React.FC = () => {
                       ? { backgroundColor: tint(theme.primary, theme.card, 0.14), color: theme.text, border: `1px solid ${tint(theme.primary, theme.card, 0.26)}` }
                       : { backgroundColor: tint(theme.text, theme.card, 0.05), color: theme.text, border: `1px solid ${theme.hairline}` }}
                   >
-                    {msg.content}
+                    {msg.role === 'user'
+                      ? <span className="whitespace-pre-wrap break-words">{msg.content}</span>
+                      : <RichContent text={msg.content} />}
                   </div>
                 </div>
               ))}
@@ -391,10 +384,10 @@ const ResultView: React.FC = () => {
           </div>
         ) : (
           <div
-            className="px-3.5 py-3 text-[13px] leading-[1.72] whitespace-pre-wrap break-words selection:bg-primary-200/60"
+            className="px-3.5 py-3 text-[13px] leading-[1.72] break-words selection:bg-primary-200/60"
             style={{ color: theme.text }}
           >
-            {content}
+            <RichContent text={content} />
           </div>
         )}
       </div>

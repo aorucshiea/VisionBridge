@@ -1,4 +1,50 @@
-export type PipelineMode = 'VLM' | 'OCR+LLM' | 'VLM+LLM'
+export type PipelineMode = 'VLM' | 'OCR+LLM' | 'VLM+LLM' | 'CUSTOM'
+
+/**
+ * How a node talks to its endpoint. Drives both the wire format in the main
+ * process and which input the node consumes from the chain.
+ */
+export type NodeApi = 'chat-vision' | 'chat' | 'ocr' | 'imagegen' | 'tts' | 'asr'
+
+export type BuiltinNodeKind = 'vlm' | 'llm' | 'ocr' | 'asr' | 'tts' | 'imagegen'
+
+export interface PipelineNode {
+  id: string
+  /** Builtin kind id, or a CustomNodeKind id. */
+  kind: string
+  /** Optional display override; falls back to the kind label. */
+  name?: string
+  provider: string
+  baseUrl: string
+  model: string
+  apiKey: string
+  api: NodeApi
+  /**
+   * Prompt template. `{input}` is replaced with the previous node's text
+   * output; when absent the input is appended after a blank line.
+   * Empty string → the kind's default prompt for the current task.
+   */
+  prompt: string
+  /** Prompt override used for the "explain" task; empty → falls back to `prompt`. */
+  promptExplain?: string
+  /** Voice name for TTS nodes (OpenAI-compatible `/v1/audio/speech`). */
+  voice?: string
+  enabled: boolean
+}
+
+export interface Pipeline {
+  id: string
+  name: string
+  nodes: PipelineNode[]
+  createdAt: string
+}
+
+/** A user-defined node category, so the palette can grow beyond the builtins. */
+export interface CustomNodeKind {
+  id: string
+  label: string
+  api: NodeApi
+}
 
 export type ProviderOption = 'ollama' | 'openai' | 'anthropic' | 'custom'
 
@@ -49,6 +95,15 @@ export interface AppSettings {
   trayIconPath: string
   savedConfigurations: SavedConfiguration[]
   showCloseConfirm: boolean
+  // --- Node-based pipelines (advanced mode) -------------------------------
+  /** When off, settings show only the three presets. */
+  advancedMode: boolean
+  /** User-composed pipelines; used when `mode` is 'CUSTOM'. */
+  pipelines: Pipeline[]
+  /** Which custom pipeline is active. */
+  activePipelineId: string | null
+  /** Extra node categories added by the user. */
+  customNodeKinds: CustomNodeKind[]
 }
 
 export interface SavedConfiguration {

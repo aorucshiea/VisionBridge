@@ -35,4 +35,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   trayIconPath: '',
   savedConfigurations: [],
   showCloseConfirm: true,
+  // Node-based pipelines. The default pipeline stays the plain multimodal
+  // (VLM) preset — the builder only appears in advanced mode.
+  advancedMode: false,
+  pipelines: [],
+  activePipelineId: null,
+  customNodeKinds: [],
 }
