@@ -106,7 +106,8 @@ export interface AppSettings {
   language: Language
   trayIconPath: string
   savedConfigurations: SavedConfiguration[]
-  showCloseConfirm: boolean
+  /** What the window close button does: hide to tray (default) or quit. */
+  closeAction: 'tray' | 'quit'
   // --- Node-based pipelines (advanced mode) -------------------------------
   /** When off, settings show only the three presets. */
   advancedMode: boolean

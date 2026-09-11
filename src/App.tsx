@@ -154,7 +154,7 @@ function App() {
       }
     }).catch(() => { /* transient — the save button still works */ })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings.enableTextSelection, settings.selectionTrigger, windowType])
+  }, [settings.enableTextSelection, settings.selectionTrigger, settings.closeAction, windowType])
 
   // Toolbar button edits persist with a short debounce — typing a prompt
   // fires many changes, so the write is throttled instead of per keystroke.

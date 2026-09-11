@@ -1,0 +1,23 @@
+
+const { app, BrowserWindow, ipcMain } = require('electron')
+const path = require('node:path')
+app.disableHardwareAcceleration(); app.commandLine.appendSwitch('disable-gpu'); app.commandLine.appendSwitch('no-sandbox')
+const out = []
+ipcMain.handle('get-settings', () => ({ mode:'VLM', theme:'light', language:'zh', vlmProvider:'openai', vlmModel:'m', vlmApiKey:'', vlmBaseUrl:'https://x', vlmTranslatePrompt:'', vlmExplainPrompt:'', ocrProvider:'custom', ocrApiKey:'', ocrBaseUrl:'https://x', ocrModel:'o', llmProvider:'openai', llmModel:'l', llmApiKey:'', llmBaseUrl:'https://x', llmTranslatePrompt:'', llmExplainPrompt:'', vlm2Provider:'ollama', vlm2Model:'v', vlm2ApiKey:'', vlm2BaseUrl:'http://x', vlm2JsonPrompt:'', llm2Provider:'ollama', llm2Model:'l', llm2ApiKey:'', llm2BaseUrl:'http://x', llm2TranslatePrompt:'', llm2ExplainPrompt:'', enableTextSelection:false, selectionTrigger:'auto', closeAction:'tray', trayIconPath:'', savedConfigurations:[], advancedMode:false, pipelines:[], activePipelineId:null, customNodeKinds:[], toolbarActions:[] }))
+ipcMain.handle('get-saved-configurations', () => [])
+const wait = ms => new Promise(r => setTimeout(r, ms))
+app.whenReady().then(async () => {
+  const win = new BrowserWindow({ width: 450, height: 760, show: true, webPreferences: { preload: path.join(__dirname, '..', 'dist-electron', 'preload.js'), contextIsolation: true, sandbox: true } })
+  await win.loadURL('http://127.0.0.1:8931/?window=main'); win.showInactive(); await wait(1100)
+  await win.webContents.executeJavaScript("[...document.querySelectorAll('button')].find(b => b.title === '设置')?.click(); true")
+  await wait(500)
+  await win.webContents.executeJavaScript("[...document.querySelectorAll('nav button')].find(b => b.textContent.includes('通用'))?.click(); true")
+  await wait(500)
+  const text = await win.webContents.executeJavaScript('document.body.innerText')
+  out.push(['has-close-setting', String(text.includes('关闭窗口时') && text.includes('最小化到托盘') && text.includes('退出应用'))])
+  const pressed = await win.webContents.executeJavaScript("[...document.querySelectorAll('button[aria-pressed]')].filter(b => ['最小化到托盘','退出应用'].includes(b.textContent.trim())).map(b => b.textContent.trim() + '=' + b.getAttribute('aria-pressed'))")
+  out.push(['close-state', JSON.stringify(pressed)])
+  const fs = require('node:fs')
+  fs.writeFileSync(path.join(__dirname, '..', 'verify-result.json'), JSON.stringify(out, null, 1))
+  app.exit(0)
+}).catch(e => { console.error('FAIL', e && e.message); app.exit(1) })

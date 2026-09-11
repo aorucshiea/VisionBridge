@@ -1,4 +1,4 @@
-import { app, BrowserWindow, globalShortcut, Tray, Menu, ipcMain, desktopCapturer, screen, dialog, clipboard } from 'electron'
+import { app, BrowserWindow, globalShortcut, Tray, Menu, ipcMain, desktopCapturer, screen, clipboard } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
 import { spawn } from 'node:child_process'
@@ -42,27 +42,6 @@ const SECURE_WEB_PREFERENCES = {
   nodeIntegration: false,
   webSecurity: true,
   spellcheck: false,
-}
-
-const DIALOG_I18N: Record<'zh' | 'en', Record<string, string>> = {
-  zh: {
-    title: '关闭确认',
-    message: '确定要关闭 VisionBridge 吗？',
-    detail: '选择"关闭应用"将退出程序，选择"最小化到托盘"将在后台运行。',
-    close: '关闭应用',
-    minimize: '最小化到托盘',
-    checkbox: '不再提醒',
-    minimizedBalloon: '已最小化到托盘。右键托盘图标可以退出。',
-  },
-  en: {
-    title: 'Close Confirmation',
-    message: 'Are you sure you want to close VisionBridge?',
-    detail: 'Choose "Close App" to quit, or "Minimize to Tray" to keep running in the background.',
-    close: 'Close App',
-    minimize: 'Minimize to Tray',
-    checkbox: 'Don\'t ask again',
-    minimizedBalloon: 'Minimized to tray. Right-click the tray icon to quit.',
-  },
 }
 
 const TEST_I18N: Record<'zh' | 'en', Record<string, (a?: string, b?: string) => string>> = {
@@ -112,56 +91,29 @@ function createWindow() {
   win.on('close', (e) => {
     if (isQuitting) return
 
+    const settings = getSettings()
+    if (settings.closeAction === 'quit') {
+      isQuitting = true
+      app.quit()
+      return
+    }
+
+    // Default: keep running in the tray.
     e.preventDefault()
-    handleCloseRequest()
+    hideToTray(settings.language)
   })
 }
 
-/** Shared close logic: confirm with the user, then quit or hide to tray. */
-async function handleCloseRequest(): Promise<void> {
-  const settings = getSettings()
-  const i18n = DIALOG_I18N[settings.language] || DIALOG_I18N.zh
-
-  if (!settings.showCloseConfirm) {
-    hideToTray(i18n)
-    return
-  }
-
-  try {
-    const response = await dialog.showMessageBox({
-      type: 'question',
-      buttons: [i18n.close, i18n.minimize],
-      title: i18n.title,
-      message: i18n.message,
-      detail: i18n.detail,
-      checkboxLabel: i18n.checkbox,
-      checkboxChecked: false,
-      defaultId: 0,
-      cancelId: 1,
-      noLink: true,
-    })
-
-    if (response.checkboxChecked) {
-      settings.showCloseConfirm = false
-      writeSettings(settings)
-    }
-
-    if (response.response === 0) {
-      isQuitting = true
-      app.quit()
-    } else {
-      hideToTray(i18n)
-    }
-  } catch (error) {
-    console.error('[Main] Error showing close confirm dialog:', error)
-    hideToTray(i18n)
-  }
-}
-
-function hideToTray(i18n: Record<string, string>): void {
+/** Hide to the tray; the balloon explains where the app went (first time only). */
+let trayHintShown = false
+function hideToTray(language: string): void {
   if (win && !win.isDestroyed()) win.hide()
-  if (tray && !tray.isDestroyed()) {
-    tray.displayBalloon({ title: 'VisionBridge', content: i18n.minimizedBalloon })
+  if (tray && !tray.isDestroyed() && !trayHintShown) {
+    trayHintShown = true
+    const content = language === 'en'
+      ? 'Still running in the tray. Right-click the icon to quit.'
+      : '已最小化到托盘，右键图标可以退出。'
+    try { tray.displayBalloon({ title: 'VisionBridge', content }) } catch { /* unsupported */ }
   }
 }
 

@@ -59,7 +59,7 @@ export interface AppSettings {
   savedConfigurations: SavedConfiguration[]
 
   // UI Settings
-  showCloseConfirm: boolean
+  closeAction: 'tray' | 'quit'
   theme: 'light' | 'dark' | 'moonlight' | 'arctic'
   language: 'zh' | 'en'
 }

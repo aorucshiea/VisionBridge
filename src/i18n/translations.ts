@@ -47,6 +47,9 @@ export interface TranslationDict {
   selectionTrigger: string
   triggerAuto: string
   triggerHotkey: string
+  closeBehavior: string
+  closeToTray: string
+  closeQuit: string
   toolbarButtons: string
   toolbarButtonsDesc: string
   addAction: string
@@ -238,6 +241,9 @@ export const translations: Record<'zh' | 'en', TranslationDict> = {
     selectionTrigger: '取词方式',
     triggerAuto: '划词自动',
     triggerHotkey: '仅快捷键',
+    closeBehavior: '关闭窗口时',
+    closeToTray: '最小化到托盘',
+    closeQuit: '退出应用',
     toolbarButtons: '工具条按钮',
     toolbarButtonsDesc: '截图框选与划词工具条上显示的按钮，每个按钮可用自己的提示词',
     addAction: '添加按钮',
@@ -427,6 +433,9 @@ export const translations: Record<'zh' | 'en', TranslationDict> = {
     selectionTrigger: 'Trigger mode',
     triggerAuto: 'On selection',
     triggerHotkey: 'Hotkey only',
+    closeBehavior: 'When closing the window',
+    closeToTray: 'Minimize to tray',
+    closeQuit: 'Quit app',
     toolbarButtons: 'Toolbar buttons',
     toolbarButtonsDesc: 'Buttons shown on the capture and selection toolbars, each with its own prompt',
     addAction: 'Add button',
