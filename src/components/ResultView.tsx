@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { ArrowUp, Check, Copy, Image as ImageIcon, MessageSquare, X } from 'lucide-react'
 import { useTranslation } from '../hooks/useTranslation'
 import { captureRegion } from '../lib/screenshot'
-import { getActiveNodes, runNodeChain, taskPromptsOf, IMAGE_MARKER_RE } from '../lib/pipeline'
+import { getActiveNodes, runNodeChain, taskPromptsOf, resolveAction, IMAGE_MARKER_RE } from '../lib/pipeline'
 import { themes, tint } from '../theme/themes'
 import type { ThemeConfig } from '../types'
 
@@ -131,11 +131,11 @@ const ResultView: React.FC = () => {
       setIsProcessing(false)
       setMessages(prev => [...prev, { role: 'user', content: `[${t('screenshot')}: ${data.region.width}x${data.region.height}]\n${t('processing')}` }])
       setIsSending(true)
-      processScreenshot(data.region, data.mode)
+      processScreenshot(data.region, data.action)
     })
   }, [])
 
-  const processScreenshot = async (region: any, mode: any) => {
+  const processScreenshot = async (region: any, actionId: string) => {
     try {
       const ipc = window.ipcRenderer
       const croppedBase64 = await captureRegion(region)
@@ -145,11 +145,13 @@ const ResultView: React.FC = () => {
       const nodes = getActiveNodes(currentSettings)
       if (!nodes || nodes.length === 0) throw new Error(t('pipelineNeedsNode'))
 
+      const { task, promptOverride } = resolveAction(actionId, currentSettings)
       const { content: result } = await runNodeChain({
         nodes,
         image: croppedBase64,
-        task: mode,
+        task,
         taskPrompts: taskPromptsOf(currentSettings),
+        promptOverride,
       })
 
       setMessages(prev => {

@@ -670,7 +670,7 @@ let lastSelAt = 0
 
 function createSelectionToolbarWindow(): BrowserWindow {
   const sWin = new BrowserWindow({
-    width: 236,
+    width: 280,
     height: 52,
     x: 0,
     y: 0,
@@ -691,6 +691,13 @@ function createSelectionToolbarWindow(): BrowserWindow {
   return sWin
 }
 
+/** Enabled toolbar buttons (mirrors the renderer's enabledToolbarActions). */
+function toolbarActionsOf(settings: { toolbarActions?: Array<{ id: string; label: string; enabled: boolean }> }): Array<{ id: string; label: string }> {
+  const list = (settings.toolbarActions || []).filter(a => a.enabled)
+  if (list.length > 0) return list.map(a => ({ id: a.id, label: a.label }))
+  return [{ id: 'translate', label: '翻译' }, { id: 'explain', label: '解释' }]
+}
+
 /** Clamp a point into the nearest display's work area. */
 function clampToWorkArea(x: number, y: number, width: number, height: number): { x: number; y: number } {
   const wa = screen.getDisplayNearestPoint({ x: Math.round(x), y: Math.round(y) }).workArea
@@ -704,10 +711,13 @@ function clampToWorkArea(x: number, y: number, width: number, height: number): {
 }
 
 function showSelectionToolbar(x: number, y: number, text: string): void {
-  const point = clampToWorkArea(x + 10, y + 12, 236, 52)
+  const settings = getSettings()
+  const actions = toolbarActionsOf(settings)
+  const width = Math.min(84 + actions.length * 66 + 44, 560)
+  const point = clampToWorkArea(x + 10, y + 12, width, 52)
   if (!selectionWin || selectionWin.isDestroyed()) selectionWin = createSelectionToolbarWindow()
-  selectionWin!.setPosition(point.x, point.y)
-  selectionWin!.webContents.send('selection-text', text)
+  selectionWin!.setBounds({ x: point.x, y: point.y, width, height: 52 })
+  selectionWin!.webContents.send('selection-text', { text, actions })
   selectionWin!.showInactive()
 }
 
@@ -715,7 +725,8 @@ function hideSelectionToolbar(): void {
   if (selectionWin && !selectionWin.isDestroyed()) selectionWin.hide()
 }
 
-ipcMain.handle('selection-toolbar-action', async (_event, action: 'translate' | 'dismiss') => {
+ipcMain.handle('selection-toolbar-action', async (_event, payload: any) => {
+  const action = typeof payload === 'string' ? payload : payload?.action
   if (action === 'dismiss') {
     hideSelectionToolbar()
     return { success: true }
@@ -727,8 +738,22 @@ ipcMain.handle('selection-toolbar-action', async (_event, action: 'translate' | 
     const settings = getSettings()
     const working = settings.language === 'en' ? 'Translating...' : '翻译中...'
     await showResultWindow(x + 12, y + 12, working)
+
     const runner = resolveTextRunner(settings)
-    const result = await callAI(runner.config, { prompt: runner.promptFor('translate', text) })
+    let prompt: string
+    if (action === 'explain') {
+      prompt = `${settings.llmExplainPrompt}\n\n${text}`
+    } else {
+      const custom = action !== 'translate'
+        ? (settings.toolbarActions || []).find((a: any) => a.id === action)
+        : null
+      const template = custom && custom.prompt && String(custom.prompt).trim() !== ''
+        ? String(custom.prompt)
+        : settings.llmTranslatePrompt
+      prompt = template.includes('{input}') ? template.replace('{input}', text) : `${template}\n\n${text}`
+    }
+
+    const result = await callAI(runner.config, { prompt })
     await showResultWindow(x + 12, y + 12, result)
     return { success: true }
   } catch (error: any) {

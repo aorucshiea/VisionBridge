@@ -89,16 +89,15 @@ def combo_sc(*scs, hold=0.08):
 SC_CTRL, SC_A, SC_ALT, SC_T = 0x1D, 0x1E, 0x38, 0x14
 combo_sc(SC_CTRL, SC_A)
 time.sleep(0.6)
-print('[test] sending Alt+T (scancodes)')
-combo_sc(SC_ALT, SC_T)
-time.sleep(8)
+print('[test] selecting text via Ctrl+A, waiting for the selection hook')
+time.sleep(6)
 
 # 4. report
 logf.flush()
 logf.close()
 data = open(LOG, encoding='utf-8', errors='replace').read()
 hits = [l for l in data.splitlines()
-        if 'TextSelection' in l or 'App is available' in l or 'ready' in l.lower()]
+        if 'TextSelection' in l or 'SelectionHook' in l or 'ready' in l.lower()]
 print('[test] --- relevant log lines ---')
 print('\n'.join(hits[-12:]) if hits else '(no TextSelection lines)')
 print('[test] --- log tail ---')

@@ -50,6 +50,7 @@ export interface AppSettings {
   pipelines: Array<{ id: string; name: string; createdAt: string; nodes: Array<any> }>
   activePipelineId: string | null
   customNodeKinds: Array<{ id: string; label: string; api: string }>
+  toolbarActions: Array<{ id: string; label: string; prompt: string; builtin?: boolean; enabled: boolean }>
 
   // Tray Icon
   trayIconPath: string

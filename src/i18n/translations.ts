@@ -47,6 +47,13 @@ export interface TranslationDict {
   selectionTrigger: string
   triggerAuto: string
   triggerHotkey: string
+  toolbarButtons: string
+  toolbarButtonsDesc: string
+  addAction: string
+  restoreDefaults: string
+  actionLabel: string
+  actionPrompt: string
+  actionPromptHint: string
   appearance: string
   theme: string
   language: string
@@ -213,6 +220,13 @@ export const translations: Record<'zh' | 'en', TranslationDict> = {
     selectionTrigger: '取词方式',
     triggerAuto: '划词自动',
     triggerHotkey: '仅快捷键',
+    toolbarButtons: '工具条按钮',
+    toolbarButtonsDesc: '截图框选与划词工具条上显示的按钮，每个按钮可用自己的提示词',
+    addAction: '添加按钮',
+    restoreDefaults: '恢复默认',
+    actionLabel: '按钮名称',
+    actionPrompt: '提示词',
+    actionPromptHint: '支持 {input} 占位符；留空则翻译动作使用默认提示词',
     appearance: '外观设置',
     theme: '主题',
     language: '语言',
@@ -377,6 +391,13 @@ export const translations: Record<'zh' | 'en', TranslationDict> = {
     selectionTrigger: 'Trigger mode',
     triggerAuto: 'On selection',
     triggerHotkey: 'Hotkey only',
+    toolbarButtons: 'Toolbar buttons',
+    toolbarButtonsDesc: 'Buttons shown on the capture and selection toolbars, each with its own prompt',
+    addAction: 'Add button',
+    restoreDefaults: 'Restore defaults',
+    actionLabel: 'Button name',
+    actionPrompt: 'Prompt',
+    actionPromptHint: 'Supports the {input} placeholder; leave empty to use the default translation prompt',
     appearance: 'Appearance',
     theme: 'Theme',
     language: 'Language',

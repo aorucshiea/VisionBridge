@@ -60,6 +60,16 @@ export type TestStatus = 'idle' | 'testing' | 'success' | 'error'
 
 export type SaveStatus = 'idle' | 'saving' | 'saved'
 
+/** A button on the screenshot / selection toolbars, with its own prompt. */
+export interface ToolbarAction {
+  id: string
+  label: string
+  /** Prompt template; `{input}` receives the selected text. Empty → task default. */
+  prompt: string
+  builtin?: boolean
+  enabled: boolean
+}
+
 export interface AppSettings {
   vlmProvider: ProviderOption
   vlmModel: string
@@ -106,6 +116,8 @@ export interface AppSettings {
   activePipelineId: string | null
   /** Extra node categories added by the user. */
   customNodeKinds: CustomNodeKind[]
+  /** Buttons shown on the screenshot / selection toolbars. */
+  toolbarActions: ToolbarAction[]
 }
 
 export interface SavedConfiguration {

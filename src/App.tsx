@@ -12,11 +12,12 @@ import ProviderConfigSection, { type SectionModel } from './components/settings/
 import ValidationCard from './components/settings/ValidationCard'
 import SavedConfigs from './components/settings/SavedConfigs'
 import AppearanceSection from './components/settings/AppearanceSection'
+import ToolbarActionsSection from './components/settings/ToolbarActionsSection'
 import { translations, type TranslationDict } from './i18n'
 import { themes, tint } from './theme/themes'
 import { DEFAULT_SETTINGS } from './lib/defaults'
 import { captureRegion } from './lib/screenshot'
-import { getActiveNodes, runNodeChain, taskPromptsOf, modeLabel } from './lib/pipeline'
+import { getActiveNodes, runNodeChain, taskPromptsOf, modeLabel, resolveAction } from './lib/pipeline'
 import type { AppSettings, SavedConfiguration, TestTarget, TestStatus } from './types'
 
 type SectionType = 'vlm' | 'ocr' | 'llm' | 'vlm2' | 'llm2'
@@ -119,7 +120,7 @@ function App() {
   const [notice, setNotice] = useState<{ text: string; tone: 'info' | 'error' } | null>(null)
   const isProcessingRef = useRef(false)
   const settingsLoadedRef = useRef(false)
-  const processScreenshotRef = useRef<(region: { x: number; y: number; width: number; height: number }, mode: 'translate' | 'explain') => void>()
+  const processScreenshotRef = useRef<(region: { x: number; y: number; width: number; height: number }, actionId: string) => void>()
   const noticeTimer = useRef<number | null>(null)
 
   const t = (key: keyof TranslationDict) => {
@@ -149,6 +150,17 @@ function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings.enableTextSelection, settings.selectionTrigger, windowType])
 
+  // Toolbar button edits persist with a short debounce — typing a prompt
+  // fires many changes, so the write is throttled instead of per keystroke.
+  useEffect(() => {
+    if (!settingsLoadedRef.current || windowType !== 'main') return
+    const timer = window.setTimeout(() => {
+      window.ipcRenderer.saveSettings(settings).catch(() => { /* the save button still works */ })
+    }, 800)
+    return () => window.clearTimeout(timer)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings.toolbarActions, windowType])
+
   useEffect(() => {
     if (windowType !== 'main') {
       document.body.style.background = 'transparent'
@@ -173,12 +185,12 @@ function App() {
     }
   }, [windowType])
 
-  const handleCapture = useCallback((region: { x: number; y: number; width: number; height: number }, mode: 'translate' | 'explain') => {
-    window.ipcRenderer.sendProcessScreenshot({ region, mode })
+  const handleCapture = useCallback((region: { x: number; y: number; width: number; height: number }, action: string) => {
+    window.ipcRenderer.sendProcessScreenshot({ region, action })
     window.ipcRenderer.closeMask()
   }, [])
 
-  const processScreenshot = useCallback(async (region: { x: number; y: number; width: number; height: number }, mode: 'translate' | 'explain') => {
+  const processScreenshot = useCallback(async (region: { x: number; y: number; width: number; height: number }, actionId: string) => {
     if (isProcessingRef.current) return
     isProcessingRef.current = true
 
@@ -206,11 +218,13 @@ function App() {
         throw new Error(t('pipelineNeedsNode'))
       }
 
+      const { task, promptOverride } = resolveAction(actionId, settings)
       const { content: result } = await runNodeChain({
         nodes,
         image: croppedBase64,
-        task: mode,
+        task,
         taskPrompts: taskPromptsOf(settings),
+        promptOverride,
       })
 
       if (!abortController.signal.aborted) {
@@ -240,7 +254,7 @@ function App() {
   useEffect(() => {
     if (windowType === 'main' && window.ipcRenderer) {
       return window.ipcRenderer.onProcessScreenshot((data) => {
-        processScreenshotRef.current?.(data.region, data.mode)
+        processScreenshotRef.current?.(data.region, data.action)
       })
     }
   }, [windowType])
@@ -707,6 +721,13 @@ function App() {
             />
 
             <AppearanceSection
+              settings={settings}
+              onPatch={(patch) => setSettings(prev => ({ ...prev, ...patch }))}
+              theme={currentTheme}
+              t={t}
+            />
+
+            <ToolbarActionsSection
               settings={settings}
               onPatch={(patch) => setSettings(prev => ({ ...prev, ...patch }))}
               theme={currentTheme}

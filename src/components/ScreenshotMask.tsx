@@ -1,11 +1,13 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react'
-import { Languages, MessageSquare, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import { useTranslation } from '../hooks/useTranslation'
 import { themes } from '../theme/themes'
-import type { ThemeConfig } from '../types'
+import { enabledToolbarActions } from '../lib/pipeline'
+import { DEFAULT_TOOLBAR_ACTIONS } from '../lib/defaults'
+import type { ThemeConfig, ToolbarAction } from '../types'
 
 interface ScreenshotMaskProps {
-  onCapture: (region: { x: number; y: number; width: number; height: number }, mode: 'translate' | 'explain') => void
+  onCapture: (region: { x: number; y: number; width: number; height: number }, action: string) => void
   onCancel: () => void
 }
 
@@ -22,6 +24,7 @@ type Region = { x: number; y: number; width: number; height: number }
 const ScreenshotMask: React.FC<ScreenshotMaskProps> = ({ onCapture, onCancel }) => {
   const { t } = useTranslation()
   const [theme, setTheme] = useState<ThemeConfig>(themes.light)
+  const [actions, setActions] = useState<ToolbarAction[]>(DEFAULT_TOOLBAR_ACTIONS)
   const [startPos, setStartPos] = useState<{ x: number; y: number } | null>(null)
   const [currentPos, setCurrentPos] = useState<{ x: number; y: number } | null>(null)
   const [selectedRegion, setSelectedRegion] = useState<Region | null>(null)
@@ -32,6 +35,7 @@ const ScreenshotMask: React.FC<ScreenshotMaskProps> = ({ onCapture, onCancel }) 
     if (!ipc) return
     ipc.getSettings().then((settings: any) => {
       setTheme(themes[(settings?.theme as keyof typeof themes) || 'light'] || themes.light)
+      setActions(enabledToolbarActions(settings ?? {}))
     }).catch(() => {})
   }, [])
 
@@ -41,9 +45,9 @@ const ScreenshotMask: React.FC<ScreenshotMaskProps> = ({ onCapture, onCancel }) 
         e.preventDefault()
         onCancel()
       }
-      if (e.key === 'Enter' && selectedRegion) {
+      if (e.key === 'Enter' && selectedRegion && actions.length > 0) {
         e.preventDefault()
-        onCapture(selectedRegion, 'translate')
+        onCapture(selectedRegion, actions[0].id)
       }
     }
     window.addEventListener('keydown', handleKeyDown)
@@ -81,8 +85,8 @@ const ScreenshotMask: React.FC<ScreenshotMaskProps> = ({ onCapture, onCancel }) 
     }
   }
 
-  const handleModeSelect = (mode: 'translate' | 'explain') => {
-    if (selectedRegion) onCapture(selectedRegion, mode)
+  const handleActionSelect = (actionId: string) => {
+    if (selectedRegion) onCapture(selectedRegion, actionId)
   }
 
   const selectionRect: Region | null = selectedRegion || (startPos && currentPos ? {
@@ -93,10 +97,10 @@ const ScreenshotMask: React.FC<ScreenshotMaskProps> = ({ onCapture, onCancel }) 
   } : null)
 
   // Keep the action bar fully on-screen, flipping above the selection when
-  // there is not enough room underneath.
+  // there is not enough room underneath. Width grows with the button count.
   const toolbar = useMemo(() => {
     if (!selectedRegion || typeof window === 'undefined') return null
-    const barWidth = 208
+    const barWidth = Math.min(96 + actions.length * 78, Math.max(240, window.innerWidth - 24))
     const gap = 12
     const below = selectedRegion.y + selectedRegion.height + gap
     const fitsBelow = below + 44 <= window.innerHeight
@@ -105,10 +109,11 @@ const ScreenshotMask: React.FC<ScreenshotMaskProps> = ({ onCapture, onCancel }) 
       window.innerWidth - barWidth / 2 - 8
     )
     return {
+      barWidth,
       left,
       top: fitsBelow ? below : Math.max(8, selectedRegion.y - 44 - gap),
     }
-  }, [selectedRegion])
+  }, [selectedRegion, actions.length])
 
   const accent = theme.primary
   const vars = {
@@ -210,45 +215,42 @@ const ScreenshotMask: React.FC<ScreenshotMaskProps> = ({ onCapture, onCancel }) 
             </span>
           </div>
 
-          {/* Action bar */}
+          {/* Action bar — one button per enabled toolbar action */}
           {selectedRegion && toolbar && (
             <div
               className="absolute glass rounded-[12px] p-1 flex items-center gap-1 animate-pop"
               style={{
                 left: toolbar.left,
                 top: toolbar.top,
+                width: toolbar.barWidth,
                 transform: 'translateX(-50%)',
                 boxShadow: '0 10px 28px -10px rgba(0,0,0,0.5)',
               }}
               onMouseDown={(e) => e.stopPropagation()}
             >
-              <button
-                type="button"
-                onClick={() => handleModeSelect('translate')}
-                className="flex items-center gap-1.5 h-8 px-3 rounded-[9px] text-[12px] font-semibold transition-[background-color,transform] duration-fast ease-out-quart active:scale-[0.97]"
-                style={{ backgroundColor: accent, color: theme.onPrimary }}
-              >
-                <Languages size={14} />
-                {t('translate')}
-              </button>
-              <button
-                type="button"
-                onClick={() => handleModeSelect('explain')}
-                className="flex items-center gap-1.5 h-8 px-3 rounded-[9px] text-[12px] font-semibold transition-[background-color,transform] duration-fast ease-out-quart active:scale-[0.97]"
-                style={{ color: theme.text }}
-                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(127,127,127,0.14)' }}
-                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent' }}
-              >
-                <MessageSquare size={14} />
-                {t('explain')}
-              </button>
-              <span aria-hidden className="w-px h-4 mx-0.5" style={{ backgroundColor: theme.border }} />
+              {actions.map((a, i) => (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={() => handleActionSelect(a.id)}
+                  className={'flex-1 min-w-0 flex items-center justify-center gap-1.5 h-8 px-2 rounded-[9px] text-[12px] font-semibold truncate transition-[background-color,transform] duration-fast ease-out-quart active:scale-[0.97]' + (i === 0 ? '' : '')}
+                  style={i === 0
+                    ? { backgroundColor: accent, color: theme.onPrimary }
+                    : { color: theme.text }}
+                  onMouseEnter={(e) => { if (i !== 0) e.currentTarget.style.backgroundColor = 'rgba(127,127,127,0.14)' }}
+                  onMouseLeave={(e) => { if (i !== 0) e.currentTarget.style.backgroundColor = 'transparent' }}
+                  title={a.label}
+                >
+                  <span className="truncate">{a.label}</span>
+                </button>
+              ))}
+              <span aria-hidden className="w-px h-4 mx-0.5 shrink-0" style={{ backgroundColor: theme.border }} />
               <button
                 type="button"
                 onClick={() => setSelectedRegion(null)}
                 aria-label={t('cancel')}
                 title={t('cancel')}
-                className="w-8 h-8 flex items-center justify-center rounded-[9px] transition-colors duration-fast ease-out-quart"
+                className="w-8 h-8 shrink-0 flex items-center justify-center rounded-[9px] transition-colors duration-fast ease-out-quart"
                 style={{ color: theme.textSecondary }}
                 onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(127,127,127,0.14)' }}
                 onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent' }}

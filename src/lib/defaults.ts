@@ -1,4 +1,9 @@
-import type { AppSettings } from '../types'
+import type { AppSettings, ToolbarAction } from '../types'
+
+export const DEFAULT_TOOLBAR_ACTIONS: ToolbarAction[] = [
+  { id: 'translate', label: '翻译', prompt: '', builtin: true, enabled: true },
+  { id: 'explain', label: '解释', prompt: '', builtin: true, enabled: true },
+]
 
 export const DEFAULT_SETTINGS: AppSettings = {
   vlmProvider: 'ollama',
@@ -42,4 +47,5 @@ export const DEFAULT_SETTINGS: AppSettings = {
   pipelines: [],
   activePipelineId: null,
   customNodeKinds: [],
+  toolbarActions: DEFAULT_TOOLBAR_ACTIONS,
 }

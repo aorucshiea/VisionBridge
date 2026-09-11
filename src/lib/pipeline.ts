@@ -1,10 +1,11 @@
 import type {
-  AppSettings, CustomNodeKind, NodeApi, Pipeline, PipelineNode,
+  AppSettings, CustomNodeKind, NodeApi, Pipeline, PipelineNode, ToolbarAction,
 } from '../types'
 import type { TranslationDict } from '../i18n'
 import {
   ScanEye, ScanText, BrainCircuit, Mic, Volume2, ImagePlus, Puzzle, type LucideIcon,
 } from 'lucide-react'
+import { DEFAULT_TOOLBAR_ACTIONS } from './defaults'
 
 // ---------------------------------------------------------------------------
 // Node kind registry
@@ -85,14 +86,25 @@ function defaultPromptFor(node: PipelineNode, task: 'translate' | 'explain', tas
 
 /**
  * Resolve a node's prompt against the chain state. The explain task prefers
- * `promptExplain` when set. `{input}` is replaced with the previous text
- * output; when the template lacks the placeholder the input is appended after
- * a blank line so text never silently disappears.
+ * `promptExplain` when set. A toolbar-action `override` beats everything.
+ * `{input}` is replaced with the previous text output; when the template
+ * lacks the placeholder the input is appended after a blank line so text
+ * never silently disappears.
  */
-export function resolvePrompt(node: PipelineNode, task: 'translate' | 'explain', taskPrompts: TaskPrompts, lastText: string): string {
+export function resolvePrompt(
+  node: PipelineNode,
+  task: 'translate' | 'explain',
+  taskPrompts: TaskPrompts,
+  lastText: string,
+  override?: string,
+): string {
   let template = node.prompt
-  if (task === 'explain' && node.promptExplain && node.promptExplain.trim() !== '') template = node.promptExplain
-  if (template.trim() === '') template = defaultPromptFor(node, task, taskPrompts)
+  if (override && override.trim() !== '') {
+    template = override
+  } else {
+    if (task === 'explain' && node.promptExplain && node.promptExplain.trim() !== '') template = node.promptExplain
+    if (template.trim() === '') template = defaultPromptFor(node, task, taskPrompts)
+  }
   if (!template) return lastText
   if (template.includes('{input}')) return template.replace('{input}', lastText)
   return lastText ? `${template}\n\n${lastText}` : template
@@ -207,6 +219,30 @@ export function taskPromptsOf(settings: AppSettings): TaskPrompts {
   return { translate: settings.llmTranslatePrompt, explain: settings.llmExplainPrompt }
 }
 
+/** Enabled toolbar buttons, with sane fallbacks when the list is empty. */
+export function enabledToolbarActions(settings: Pick<AppSettings, 'toolbarActions'>): ToolbarAction[] {
+  const list = (settings.toolbarActions || []).filter(a => a.enabled)
+  if (list.length > 0) return list
+  return DEFAULT_TOOLBAR_ACTIONS.filter(a => a.enabled)
+}
+
+/**
+ * Resolve a toolbar action id to a chain task + optional prompt override.
+ * 'translate' / 'explain' map to the builtin tasks; anything else is looked
+ * up in the user's toolbar buttons.
+ */
+export function resolveAction(actionId: string, settings: Pick<AppSettings, 'toolbarActions'>): {
+  task: 'translate' | 'explain'
+  promptOverride?: string
+  label: string
+} {
+  if (actionId === 'translate') return { task: 'translate', label: '翻译' }
+  if (actionId === 'explain') return { task: 'explain', label: '解释' }
+  const a = (settings.toolbarActions || []).find(x => x.id === actionId)
+  if (a) return { task: 'translate', promptOverride: a.prompt || undefined, label: a.label }
+  return { task: 'translate', label: actionId }
+}
+
 // ---------------------------------------------------------------------------
 // The engine: run a node chain sequentially.
 //
@@ -229,10 +265,12 @@ export interface ChainRunOptions {
   image: string | null
   task: 'translate' | 'explain'
   taskPrompts: TaskPrompts
+  /** Toolbar-action prompt — overrides node prompts for this run. */
+  promptOverride?: string
 }
 
 export async function runNodeChain(opts: ChainRunOptions): Promise<ChainRunResult> {
-  const { nodes, image, task, taskPrompts } = opts
+  const { nodes, image, task, taskPrompts, promptOverride } = opts
   const ipc = window.ipcRenderer
 
   let lastText = ''
@@ -241,7 +279,7 @@ export async function runNodeChain(opts: ChainRunOptions): Promise<ChainRunResul
 
   for (const node of nodes) {
     const cfg = { provider: node.provider, apiKey: node.apiKey, baseUrl: node.baseUrl, model: node.model }
-    const prompt = resolvePrompt(node, task, taskPrompts, lastText)
+    const prompt = resolvePrompt(node, task, taskPrompts, lastText, promptOverride)
 
     switch (node.api) {
       case 'chat-vision': {

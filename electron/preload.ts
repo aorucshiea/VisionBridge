@@ -14,15 +14,15 @@ function subscribe(channel: string, listener: (event: IpcRendererEvent, ...args:
 
 const api = {
   // Events (main -> renderer)
-  onProcessScreenshot: (cb: (data: { region: any; mode: any }) => void) =>
+  onProcessScreenshot: (cb: (data: { region: any; action: string }) => void) =>
     subscribe('process-screenshot', (_e, data) => cb(data)),
   onCancelRequests: (cb: () => void) =>
     subscribe('cancel-requests', () => cb()),
   onDisplayContent: (cb: (content: string) => void) =>
     subscribe('display-content', (_e, content) => cb(content)),
-  onSelectionText: (cb: (text: string) => void) =>
-    subscribe('selection-text', (_e, text) => cb(text)),
-  selectionToolbarAction: (action: 'translate' | 'dismiss') =>
+  onSelectionText: (cb: (payload: { text: string; actions: Array<{ id: string; label: string }> }) => void) =>
+    subscribe('selection-text', (_e, payload) => cb(payload)),
+  selectionToolbarAction: (action: string) =>
     ipcRenderer.invoke('selection-toolbar-action', action),
   onAppendScreenshot: (cb: (data: any) => void) =>
     subscribe('append-screenshot', (_e, data) => cb(data)),
@@ -33,7 +33,7 @@ const api = {
 
   // Screenshot / windows
   captureScreen: () => ipcRenderer.invoke('capture-screen'),
-  sendProcessScreenshot: (data: { region: any; mode: any }) => ipcRenderer.send('process-screenshot', data),
+  sendProcessScreenshot: (data: { region: any; action: string }) => ipcRenderer.send('process-screenshot', data),
   showResult: (data: { x: number; y: number; content: string }) => ipcRenderer.invoke('show-result', data),
   hideResult: () => ipcRenderer.invoke('hide-result'),
   /** Open the capture mask. target='result' routes the capture back to the chat/result window. */

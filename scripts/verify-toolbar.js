@@ -28,19 +28,27 @@ app.whenReady().then(async () => {
     },
   })
   await win.loadURL('http://127.0.0.1:8931/?window=selection-toolbar')
-  win.webContents.send('selection-text', 'Hello selection hook')
+  win.webContents.send('selection-text', {
+    text: 'Hello selection hook',
+    actions: [
+      { id: 'translate', label: '翻译' },
+      { id: 'explain', label: '解释' },
+      { id: 'a-custom', label: '总结' },
+    ],
+  })
   await wait(600)
 
   const state = await win.webContents.executeJavaScript(`
     (() => {
-      const btn = [...document.querySelectorAll('button')].find(b => b.title === '翻译');
-      return { found: !!btn, disabled: btn ? btn.disabled : null };
+      const btns = [...document.querySelectorAll('button')].filter(b => b.title && b.title !== '关闭');
+      return { count: btns.length, labels: btns.map(b => b.title), firstDisabled: btns[0]?.disabled ?? null };
     })()
   `)
-  out.push(['toolbar-rendered', JSON.stringify(state)])
+  out.push(['toolbar-buttons', JSON.stringify(state)])
 
-  await win.webContents.executeJavaScript(
-    "[...document.querySelectorAll('button')].find(b => b.title === '翻译')?.click(); true")
+  // click the third (custom) button
+  await win.webContents.executeJavaScript(`
+    [...document.querySelectorAll('button')].filter(b => b.title && b.title !== '关闭')[2]?.click(); true`)
   await wait(400)
 
   out.push(['done', 'ok'])
