@@ -28,8 +28,6 @@ interface SectionVariant {
   tone: 'primary' | 'accent'
   titleKey: keyof TranslationDict
   collapsible: boolean
-  providerOptions: 'standard' | 'ocr'
-  layout: 'vlm' | 'split'
   fields: Array<'translatePrompt' | 'explainPrompt' | 'jsonPrompt'>
   testStyle: 'inline' | 'full'
   testLabelKey: keyof TranslationDict
@@ -39,28 +37,26 @@ interface SectionVariant {
 const SECTION_VARIANTS: Record<SectionType, SectionVariant> = {
   vlm: {
     step: undefined, tone: 'primary', titleKey: 'vlmConfig', collapsible: false,
-    providerOptions: 'standard', layout: 'vlm',
     fields: ['translatePrompt', 'explainPrompt'],
     testStyle: 'inline', testLabelKey: 'test', modelPlaceholderKey: 'placeholderModel',
   },
   ocr: {
     step: '1', tone: 'primary', titleKey: 'ocrEngine', collapsible: true,
-    providerOptions: 'ocr', layout: 'split', fields: [],
+    fields: [],
     testStyle: 'inline', testLabelKey: 'test', modelPlaceholderKey: 'ocrModelPlaceholder',
   },
   llm: {
     step: '2', tone: 'accent', titleKey: 'languageModel', collapsible: true,
-    providerOptions: 'standard', layout: 'split', fields: [],
+    fields: [],
     testStyle: 'full', testLabelKey: 'testLlmConnection', modelPlaceholderKey: 'llmModelPlaceholder',
   },
   vlm2: {
     step: '1', tone: 'primary', titleKey: 'vlmJson', collapsible: true,
-    providerOptions: 'standard', layout: 'split', fields: ['jsonPrompt'],
+    fields: ['jsonPrompt'],
     testStyle: 'full', testLabelKey: 'testVlmConnection', modelPlaceholderKey: 'placeholderModel',
   },
   llm2: {
     step: '2', tone: 'accent', titleKey: 'llmJson', collapsible: true,
-    providerOptions: 'standard', layout: 'split',
     fields: ['translatePrompt', 'explainPrompt'],
     testStyle: 'full', testLabelKey: 'testLlmConnection', modelPlaceholderKey: 'placeholderModel',
   },
@@ -439,8 +435,6 @@ function App() {
         collapsible={v.collapsible}
         expanded={expandedSections[type]}
         onToggle={() => toggleSection(type)}
-        providerOptions={v.providerOptions}
-        layout={v.layout}
         fields={v.fields}
         testStyle={v.testStyle}
         testLabelKey={v.testLabelKey}

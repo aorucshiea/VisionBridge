@@ -51,6 +51,7 @@ const api = {
   chatWithAI: (messages: Array<{ role: string; content: string }>) => ipcRenderer.invoke('chat-with-ai', messages),
   testConnection: (config: any, type: 'vlm' | 'ocr' | 'llm' | 'vlm2' | 'llm2') =>
     ipcRenderer.invoke('test-connection', config, type),
+  listModels: (config: any) => ipcRenderer.invoke('list-models', config),
 
   // Chat history
   saveChatHistory: (data: any) => ipcRenderer.invoke('save-chat-history', data),

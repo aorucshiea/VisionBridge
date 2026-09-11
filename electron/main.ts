@@ -5,6 +5,7 @@ import { spawn } from 'node:child_process'
 import axios from 'axios'
 import { initSettings, getSettings, writeSettings } from './settings'
 import { initAIService, callAI } from './ai'
+import { wireOf } from '../src/lib/providers'
 
 // Disable hardware acceleration to fix transparency issues on some Windows machines
 app.disableHardwareAcceleration()
@@ -450,7 +451,9 @@ ipcMain.handle('delete-configuration', async (_event, id: string) => {
 })
 
 ipcMain.handle('test-connection', async (_event, config: any) => {
-  const { provider, apiKey, baseUrl, model } = config
+  const { apiKey, baseUrl, model } = config
+  const provider: string = config.provider
+  const wire = wireOf(provider)
   const i18n = TEST_I18N[getSettings().language] || TEST_I18N.zh
 
   // Clean URL
@@ -462,7 +465,7 @@ ipcMain.handle('test-connection', async (_event, config: any) => {
   cleanBaseUrl = cleanBaseUrl.replace(/\/+$/, '')
 
   try {
-    if (provider === 'ollama') {
+    if (wire === 'ollama') {
       // For Ollama, check if the service is accessible and model exists
       const response = await axios.get(`${cleanBaseUrl}/api/tags`, { timeout: 5000 })
       const models = response.data?.models || []
@@ -474,7 +477,7 @@ ipcMain.handle('test-connection', async (_event, config: any) => {
       }
     }
 
-    if (provider === 'openai' || provider === 'custom') {
+    if (wire === 'openai' || wire === 'custom') {
       await axios.post(`${cleanBaseUrl}/v1/chat/completions`, {
         model,
         messages: [{ role: 'user', content: 'OK' }],
@@ -487,7 +490,7 @@ ipcMain.handle('test-connection', async (_event, config: any) => {
       return { success: true, available: true, message: i18n.connected() }
     }
 
-    if (provider === 'anthropic') {
+    if (wire === 'anthropic') {
       await axios.post(`${cleanBaseUrl}/v1/messages`, {
         model,
         max_tokens: 1,

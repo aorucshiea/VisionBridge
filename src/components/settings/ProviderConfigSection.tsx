@@ -1,7 +1,8 @@
-import React from 'react'
-import { ChevronDown } from 'lucide-react'
+import React, { useId, useState } from 'react'
+import { ChevronDown, Download } from 'lucide-react'
 import type { ThemeConfig, TestStatus } from '../../types'
 import type { TranslationDict } from '../../i18n'
+import { PROVIDER_PRESETS, PROVIDER_GROUPS, GROUP_LABEL_KEY, presetOf } from '../../lib/providers'
 import { tint } from '../../theme/themes'
 import {
   Card, FieldLabel, MonoInput, PasswordInput, Select, TextArea, TextInput,
@@ -28,8 +29,6 @@ interface ProviderConfigSectionProps {
   collapsible: boolean
   expanded: boolean
   onToggle: () => void
-  providerOptions: 'standard' | 'ocr'
-  layout: 'vlm' | 'split'
   fields: Array<'translatePrompt' | 'explainPrompt' | 'jsonPrompt'>
   testStyle: 'inline' | 'full'
   testLabelKey: keyof TranslationDict
@@ -55,123 +54,154 @@ const FIELD_META: Record<'translatePrompt' | 'explainPrompt' | 'jsonPrompt', {
   jsonPrompt: { labelKey: 'jsonPrompt', placeholderKey: 'placeholderJsonPrompt', rows: 4 },
 }
 
-function standardOptions(t: TFunc): Array<{ value: string; label: string }> {
-  return [
-    { value: 'ollama', label: t('ollamaLocal') },
-    { value: 'openai', label: t('openai') },
-    { value: 'anthropic', label: t('anthropic') },
-    { value: 'custom', label: t('customEndpoint') },
-  ]
-}
-
-function ocrOptions(t: TFunc): Array<{ value: string; label: string }> {
-  return [
-    { value: 'local', label: t('tesseractLocal') },
-    { value: 'ollama', label: t('ollamaVision') },
-    { value: 'baidu', label: t('baiduCloud') },
-    { value: 'google', label: t('googleVision') },
-    { value: 'custom', label: t('customVision') },
-  ]
-}
+const GROUPS = PROVIDER_GROUPS
 
 const ProviderConfigSection: React.FC<ProviderConfigSectionProps> = (props) => {
   const {
     type, step, tone, titleKey, collapsible, expanded, onToggle,
-    providerOptions, layout, fields, testStyle, testLabelKey, modelPlaceholderKey,
+    fields, testStyle, testLabelKey, modelPlaceholderKey,
     section, onPatch, testStatus, testMessage, showApiKey, onToggleApiKey, onTest,
     theme, t,
   } = props
 
   const toneColor = tone === 'accent' ? theme.accent : theme.primary
+  const datalistId = `models-${useId()}`
+  const [fetched, setFetched] = useState<Record<string, string[]>>({})
+  const [fetchState, setFetchState] = useState<Record<string, 'idle' | 'loading' | 'error'>>({})
+  const [fetchError, setFetchError] = useState('')
+
+  const preset = presetOf(section.provider)
+  const cacheKey = `${section.provider}|${section.baseUrl}`
+  const suggestions = [...new Set([...(preset?.models || []), ...(fetched[cacheKey] || [])])]
+
+  const handleProviderChange = (id: string) => {
+    const target = presetOf(id)
+    // Picking a vendor autofills its API host; the key and model stay yours.
+    onPatch(target && target.baseUrl ? { provider: id, baseUrl: target.baseUrl } : { provider: id })
+  }
+
+  const fetchModels = async () => {
+    setFetchState(prev => ({ ...prev, [cacheKey]: 'loading' }))
+    setFetchError('')
+    try {
+      const models: string[] = await window.ipcRenderer.listModels({
+        provider: section.provider, apiKey: section.apiKey, baseUrl: section.baseUrl, model: '',
+      })
+      setFetched(prev => ({ ...prev, [cacheKey]: models }))
+      setFetchState(prev => ({ ...prev, [cacheKey]: 'idle' }))
+    } catch (error: any) {
+      setFetchError(error?.message || String(error))
+      setFetchState(prev => ({ ...prev, [cacheKey]: 'error' }))
+    }
+  }
+
+  const providerSelect = (
+    <Select
+      value={section.provider}
+      onChange={(e) => handleProviderChange(e.target.value)}
+      aria-label={t('apiProvider')}
+      theme={theme}
+    >
+      {GROUPS.map(g => (
+        <optgroup key={g.key} label={t(GROUP_LABEL_KEY[g.key] as keyof TranslationDict)}>
+          {PROVIDER_PRESETS.filter(p => p.group === g.key).map(p => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
+        </optgroup>
+      ))}
+    </Select>
+  )
+
+  const modelDatalist = (
+    <datalist id={datalistId}>
+      {suggestions.map(m => <option key={m} value={m} />)}
+    </datalist>
+  )
+
+  const fetchButton = (
+    <button
+      type="button"
+      onClick={() => void fetchModels()}
+      disabled={fetchState[cacheKey] === 'loading'}
+      aria-label={t('fetchModels')}
+      title={t('fetchModels')}
+      className="w-10 h-10 shrink-0 flex items-center justify-center rounded-field border transition-colors duration-150 ease-out-quart active:scale-[0.97] disabled:opacity-50"
+      style={{ backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.textSecondary }}
+    >
+      {fetchState[cacheKey] === 'loading'
+        ? <span className="w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin opacity-70" />
+        : <Download size={15} />}
+    </button>
+  )
+
+  const modelInput = (className = '') => (
+    <>
+      <TextInput
+        type="text"
+        list={datalistId}
+        value={section.model}
+        onChange={(e) => onPatch({ model: e.target.value })}
+        placeholder={t(modelPlaceholderKey)}
+        className={className}
+        theme={theme}
+      />
+      {modelDatalist}
+    </>
+  )
 
   const content = (
     <div className="space-y-3.5">
-      <Select
-        value={section.provider}
-        onChange={(e) => onPatch({ provider: e.target.value })}
-        aria-label={t('apiProvider')}
-        theme={theme}
-      >
-        {(providerOptions === 'ocr' ? ocrOptions(t) : standardOptions(t)).map(o => (
-          <option key={o.value} value={o.value}>{o.label}</option>
-        ))}
-      </Select>
+      {providerSelect}
 
-      {layout === 'vlm' ? (
-        <>
-          <div>
-            <FieldLabel theme={theme}>{t('baseUrl')}</FieldLabel>
-            <MonoInput
-              type="text"
-              value={section.baseUrl}
-              onChange={(e) => onPatch({ baseUrl: e.target.value })}
-              theme={theme}
-            />
+      <div>
+        <FieldLabel theme={theme}>{t('baseUrl')}</FieldLabel>
+        <MonoInput
+          type="text"
+          value={section.baseUrl}
+          onChange={(e) => onPatch({ baseUrl: e.target.value })}
+          theme={theme}
+        />
+      </div>
+
+      {type !== 'ocr' ? (
+        <div>
+          <FieldLabel theme={theme}>{t('modelName')}</FieldLabel>
+          <div className="flex gap-2">
+            <div className="flex-[1.4] min-w-0">{modelInput()}</div>
+            {fetchButton}
+            {testStyle === 'inline'
+              ? <TestButton status={testStatus} onClick={onTest} label={t('test')} theme={theme} />
+              : null}
           </div>
-          <div>
-            <FieldLabel theme={theme}>{t('modelName')}</FieldLabel>
-            <div className="flex gap-2">
-              <TextInput
-                type="text"
-                value={section.model}
-                onChange={(e) => onPatch({ model: e.target.value })}
-                placeholder={t(modelPlaceholderKey)}
-                className="flex-1"
-                theme={theme}
-              />
-              <TestButton status={testStatus} onClick={onTest} label={t('test')} theme={theme} />
-            </div>
-            <TestStatusText status={testStatus} message={testMessage} />
-          </div>
-        </>
+          <TestStatusText status={testStatus} message={testMessage} />
+          {fetchError ? (
+            <p className="text-xs leading-relaxed" style={{ color: theme.danger }}>{fetchError}</p>
+          ) : null}
+        </div>
       ) : (
-        <>
-          <div>
-            <FieldLabel theme={theme}>{t('baseUrl')}</FieldLabel>
-            <MonoInput
-              type="text"
-              value={section.baseUrl}
-              onChange={(e) => onPatch({ baseUrl: e.target.value })}
-              theme={theme}
-            />
+        <div>
+          <FieldLabel theme={theme}>{t('modelName')}</FieldLabel>
+          <div className="flex gap-2">
+            <div className="flex-1 min-w-0">{modelInput()}</div>
+            {fetchButton}
           </div>
-          {type !== 'ocr' && (
-            <div className="grid grid-cols-2 gap-2">
-              <TextInput
-                type="text"
-                value={section.model}
-                onChange={(e) => onPatch({ model: e.target.value })}
-                placeholder={t(modelPlaceholderKey)}
-                aria-label={t('modelName')}
-                theme={theme}
-              />
-              <PasswordInput
-                value={section.apiKey}
-                onChange={(v) => onPatch({ apiKey: v })}
-                show={showApiKey}
-                onToggleShow={onToggleApiKey}
-                placeholder={t('placeholderApiKey')}
-                label={t('showHideKey')}
-                theme={theme}
-              />
-            </div>
-          )}
-          {type === 'ocr' && (
-            <div>
-              <FieldLabel theme={theme}>{t('modelName')}</FieldLabel>
-              <TextInput
-                type="text"
-                value={section.model}
-                onChange={(e) => onPatch({ model: e.target.value })}
-                placeholder={t(modelPlaceholderKey)}
-                theme={theme}
-              />
-            </div>
-          )}
-        </>
+        </div>
       )}
 
-      {type === 'vlm' || type === 'ocr' ? (
+      {type !== 'ocr' ? (
+        <div>
+          <FieldLabel theme={theme}>{t('apiKey')}</FieldLabel>
+          <PasswordInput
+            value={section.apiKey}
+            onChange={(v) => onPatch({ apiKey: v })}
+            show={showApiKey}
+            onToggleShow={onToggleApiKey}
+            placeholder={t('placeholderApiKey')}
+            label={t('showHideKey')}
+            theme={theme}
+          />
+        </div>
+      ) : (
         <div>
           <FieldLabel theme={theme}>{t('apiKey')}</FieldLabel>
           <div className="flex gap-2">
@@ -180,15 +210,17 @@ const ProviderConfigSection: React.FC<ProviderConfigSectionProps> = (props) => {
               onChange={(v) => onPatch({ apiKey: v })}
               show={showApiKey}
               onToggleShow={onToggleApiKey}
-              placeholder={type === 'vlm' ? t('placeholderApiKey') : t('ocrApiKeyPlaceholder')}
+              placeholder={t('ocrApiKeyPlaceholder')}
               label={t('showHideKey')}
               theme={theme}
             />
-            {type === 'ocr' && <TestButton status={testStatus} onClick={onTest} label={t('test')} theme={theme} />}
+            {type === 'ocr' && testStyle === 'inline'
+              ? <TestButton status={testStatus} onClick={onTest} label={t('test')} theme={theme} />
+              : null}
           </div>
           <TestStatusText status={testStatus} message={testMessage} />
         </div>
-      ) : null}
+      )}
 
       {fields.map(field => {
         const meta = FIELD_META[field]

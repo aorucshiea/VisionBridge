@@ -1,9 +1,11 @@
 import React, { useState } from 'react'
 import {
-  Plus, Trash2, ArrowUp, ArrowDown, ChevronDown, Check, Layers, Pencil, Puzzle,
+  Plus, Trash2, ArrowUp, ArrowDown, ChevronDown, Check, Layers, Pencil, Puzzle, Download,
 } from 'lucide-react'
 import type { AppSettings, CustomNodeKind, NodeApi, Pipeline, PipelineNode, ThemeConfig, TestStatus } from '../../types'
+import type { TranslationDict } from '../../i18n'
 import { paletteKinds, kindMeta, customKindLabel, createNode, createPipeline, moveNode } from '../../lib/pipeline'
+import { PROVIDER_PRESETS, PROVIDER_GROUPS, GROUP_LABEL_KEY, presetOf } from '../../lib/providers'
 import { tint } from '../../theme/themes'
 import {
   Card, FieldLabel, MonoInput, PasswordInput, Select, TextArea, TextInput,
@@ -18,16 +20,16 @@ interface Props {
   t: TFunc
 }
 
-const API_OPTIONS: Array<{ value: NodeApi; labelKey: 'kindVlm' | 'kindOcr' | 'kindLlm' | 'kindImagegen' | 'kindTts' | 'kindAsr'; label: string }> = [
-  { value: 'chat-vision', labelKey: 'kindVlm', label: 'chat + vision' },
-  { value: 'chat', labelKey: 'kindLlm', label: 'chat' },
-  { value: 'ocr', labelKey: 'kindOcr', label: 'OCR' },
-  { value: 'imagegen', labelKey: 'kindImagegen', label: 'images/generations' },
-  { value: 'tts', labelKey: 'kindTts', label: 'audio/speech' },
-  { value: 'asr', labelKey: 'kindAsr', label: 'audio/transcriptions' },
+const API_OPTIONS: Array<{ value: NodeApi; label: string }> = [
+  { value: 'chat-vision', label: 'chat + vision' },
+  { value: 'chat', label: 'chat' },
+  { value: 'ocr', label: 'OCR' },
+  { value: 'imagegen', label: 'images/generations' },
+  { value: 'tts', label: 'audio/speech' },
+  { value: 'asr', label: 'audio/transcriptions' },
 ]
 
-const PROVIDERS = ['ollama', 'openai', 'anthropic', 'custom'] as const
+const PROVIDER_GROUPS_UI = PROVIDER_GROUPS
 
 /**
  * Advanced-mode workspace: compose nodes (VLM / LLM / OCR / ASR / TTS /
@@ -40,6 +42,7 @@ const PipelineBuilder: React.FC<Props> = ({ settings, onPatch, onNotify, theme, 
   const [draft, setDraft] = useState<Pipeline | null>(null)
   const [expandedNode, setExpandedNode] = useState<string | null>(null)
   const [nodeTest, setNodeTest] = useState<Record<string, { status: TestStatus; message: string }>>({})
+  const [nodeModels, setNodeModels] = useState<Record<string, string[]>>({})
   const [showApiKey, setShowApiKey] = useState<Record<string, boolean>>({})
   const [newKindOpen, setNewKindOpen] = useState(false)
   const [newKindLabel, setNewKindLabel] = useState('')
@@ -106,6 +109,22 @@ const PipelineBuilder: React.FC<Props> = ({ settings, onPatch, onNotify, theme, 
   const removeNode = (id: string) => {
     if (!draft) return
     setDraft({ ...draft, nodes: draft.nodes.filter(n => n.id !== id) })
+  }
+
+  const fetchNodeModels = async (node: PipelineNode) => {
+    const key = `${node.provider}|${node.baseUrl}`
+    setNodeTest(prev => ({ ...prev, [node.id]: { status: 'testing', message: t('testing') } }))
+    try {
+      const models: string[] = await window.ipcRenderer.listModels({
+        provider: node.provider, apiKey: node.apiKey, baseUrl: node.baseUrl, model: '',
+      })
+      setNodeModels(prev => ({ ...prev, [key]: models }))
+      setNodeTest(prev => ({ ...prev, [node.id]: { status: 'success', message: t('fetchModels') + ' · ' + models.length } }))
+    } catch (error: any) {
+      setNodeTest(prev => ({ ...prev, [node.id]: { status: 'error', message: `${t('fetchModelsFailed')}${error.message}` } }))
+    } finally {
+      window.setTimeout(() => setNodeTest(prev => ({ ...prev, [node.id]: { status: 'idle', message: '' } })), 4000)
+    }
   }
 
   const testNode = async (node: PipelineNode) => {
@@ -185,8 +204,22 @@ const PipelineBuilder: React.FC<Props> = ({ settings, onPatch, onNotify, theme, 
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <FieldLabel theme={theme}>{t('apiProvider')}</FieldLabel>
-                <Select value={node.provider} onChange={(e) => patchNode(node.id, { provider: e.target.value })} theme={theme}>
-                  {PROVIDERS.map(p => <option key={p} value={p}>{p}</option>)}
+                <Select
+                  value={node.provider}
+                  onChange={(e) => {
+                    const id = e.target.value
+                    const target = presetOf(id)
+                    patchNode(node.id, target && target.baseUrl ? { provider: id, baseUrl: target.baseUrl } : { provider: id })
+                  }}
+                  theme={theme}
+                >
+                  {PROVIDER_GROUPS_UI.map(g => (
+                    <optgroup key={g.key} label={t(GROUP_LABEL_KEY[g.key] as keyof TranslationDict)}>
+                      {PROVIDER_PRESETS.filter(p => p.group === g.key).map(p => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </optgroup>
+                  ))}
                 </Select>
               </div>
               <div>
@@ -205,7 +238,34 @@ const PipelineBuilder: React.FC<Props> = ({ settings, onPatch, onNotify, theme, 
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <FieldLabel theme={theme}>{t('modelName')}</FieldLabel>
-                <TextInput value={node.model} onChange={(e) => patchNode(node.id, { model: e.target.value })} placeholder={t('placeholderModel')} theme={theme} />
+                <div className="flex gap-1.5">
+                  <div className="flex-1 min-w-0">
+                    <TextInput
+                      value={node.model}
+                      onChange={(e) => patchNode(node.id, { model: e.target.value })}
+                      placeholder={t('placeholderModel')}
+                      list={`models-node-${node.id}`}
+                      theme={theme}
+                    />
+                    <datalist id={`models-node-${node.id}`}>
+                      {[
+                        ...(presetOf(node.provider)?.models || []),
+                        ...(nodeModels[`${node.provider}|${node.baseUrl}`] || []),
+                      ].map(m => <option key={m} value={m} />)}
+                    </datalist>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void fetchNodeModels(node)}
+                    disabled={test.status === 'testing'}
+                    aria-label={t('fetchModels')}
+                    title={t('fetchModels')}
+                    className="w-8 h-10 shrink-0 flex items-center justify-center rounded-field border transition-colors duration-150 ease-out-quart disabled:opacity-50"
+                    style={{ backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.textSecondary }}
+                  >
+                    <Download size={14} />
+                  </button>
+                </div>
               </div>
               <div>
                 <FieldLabel theme={theme}>{t('apiKey')}</FieldLabel>

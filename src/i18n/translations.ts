@@ -54,6 +54,11 @@ export interface TranslationDict {
   actionLabel: string
   actionPrompt: string
   actionPromptHint: string
+  fetchModels: string
+  fetchModelsFailed: string
+  providerGroupCn: string
+  providerGroupGlobal: string
+  providerGroupLocal: string
   appearance: string
   theme: string
   language: string
@@ -227,6 +232,11 @@ export const translations: Record<'zh' | 'en', TranslationDict> = {
     actionLabel: '按钮名称',
     actionPrompt: '提示词',
     actionPromptHint: '支持 {input} 占位符；留空则翻译动作使用默认提示词',
+    fetchModels: '获取模型',
+    fetchModelsFailed: '获取模型失败: ',
+    providerGroupCn: '国内服务',
+    providerGroupGlobal: '国际服务',
+    providerGroupLocal: '本地与自定义',
     appearance: '外观设置',
     theme: '主题',
     language: '语言',
@@ -398,6 +408,11 @@ export const translations: Record<'zh' | 'en', TranslationDict> = {
     actionLabel: 'Button name',
     actionPrompt: 'Prompt',
     actionPromptHint: 'Supports the {input} placeholder; leave empty to use the default translation prompt',
+    fetchModels: 'Fetch models',
+    fetchModelsFailed: 'Failed to fetch models: ',
+    providerGroupCn: 'China services',
+    providerGroupGlobal: 'Global services',
+    providerGroupLocal: 'Local & custom',
     appearance: 'Appearance',
     theme: 'Theme',
     language: 'Language',

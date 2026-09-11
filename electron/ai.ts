@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron'
 import axios from 'axios'
+import { wireOf } from '../src/lib/providers'
 
 export interface AIRequestPayload {
   prompt: string
@@ -117,7 +118,8 @@ async function request(config: any, requestData: any, extra: { headers?: Record<
 }
 
 export async function callAI(config: AIServiceConfig, payload: AIRequestPayload): Promise<string> {
-  const { provider, apiKey, baseUrl, model } = config
+  const { apiKey, baseUrl, model } = config
+  const wire = wireOf(config.provider)
   const safeUrl = cleanUrl(baseUrl)
   const trimmedModel = model ? model.trim() : ''
 
@@ -126,7 +128,7 @@ export async function callAI(config: AIServiceConfig, payload: AIRequestPayload)
   }
 
   try {
-    if (provider === 'ollama') {
+    if (wire === 'ollama') {
       const url = `${safeUrl}/api/chat`
       const messages = payload.messages || [{
         role: 'user',
@@ -145,7 +147,7 @@ export async function callAI(config: AIServiceConfig, payload: AIRequestPayload)
       return content
     }
 
-    if (provider === 'openai' || provider === 'custom') {
+    if (wire === 'openai' || wire === 'custom') {
       const url = `${safeUrl}/v1/chat/completions`
       const messages: any[] = payload.messages || [{
         role: 'user',
@@ -178,7 +180,7 @@ export async function callAI(config: AIServiceConfig, payload: AIRequestPayload)
       return result
     }
 
-    if (provider === 'anthropic') {
+    if (wire === 'anthropic') {
       const url = `${safeUrl}/v1/messages`
 
       const content: any[] = []
@@ -207,10 +209,10 @@ export async function callAI(config: AIServiceConfig, payload: AIRequestPayload)
       return response.data?.content?.[0]?.text || '(No text content returned from Claude)'
     }
 
-    throw new Error(`Unsupported AI Provider: ${provider}`)
+    throw new Error(`Unsupported AI Provider: ${config.provider}`)
   } catch (e: any) {
     if (e.name === 'AbortError') throw e
-    throw new Error(`${provider} AI Error: ${extractErrorMessage(e)}`)
+    throw new Error(`${config.provider} AI Error: ${extractErrorMessage(e)}`)
   }
 }
 
@@ -219,6 +221,8 @@ export function initAIService() {
 
   ipcMain.handle('call-ocr', async (_e, config: AIServiceConfig, imageBase64: string) => {
     const { provider, apiKey, baseUrl, model } = config
+    const rawWire: string = wireOf(provider)
+    const wire = rawWire === 'local' ? 'ollama' : rawWire
     const safeUrl = cleanUrl(baseUrl)
     const trimmedModel = model ? model.trim() : ''
 
@@ -227,7 +231,7 @@ export function initAIService() {
     }
 
     try {
-      if (provider === 'ollama' || provider === 'local') {
+      if (wire === 'ollama') {
         const url = `${safeUrl}/api/chat`
         const response = await request({ url }, {
           model: trimmedModel,
@@ -246,7 +250,7 @@ export function initAIService() {
         return content
       }
 
-      if (provider === 'custom' || provider === 'openai') {
+      if (wire === 'openai' || wire === 'custom') {
         const url = `${safeUrl}/v1/chat/completions`
         const response = await request({ url }, {
           model: trimmedModel,
@@ -295,8 +299,9 @@ export function initAIService() {
     new Error(`节点类别 "${kind}" 需要 OpenAI 兼容端点（自定义/OpenAI 均可），${provider === 'ollama' ? 'Ollama 暂不支持' : `当前 provider "${provider}" 不支持`}`)
 
   ipcMain.handle('call-image-gen', async (_e, config: AIServiceConfig, prompt: string) => {
-    const { provider, apiKey, baseUrl, model } = config
-    if (provider === 'ollama') throw mediaUnsupported(provider, 'imagegen')
+    const { apiKey, baseUrl, model } = config
+    const provider = config.provider
+    if (wireOf(provider) === 'ollama') throw mediaUnsupported(provider, 'imagegen')
     const url = `${cleanUrl(baseUrl)}/v1/images/generations`
     try {
       const response = await request({ url }, {
@@ -320,8 +325,9 @@ export function initAIService() {
   })
 
   ipcMain.handle('call-tts', async (_e, config: AIServiceConfig & { voice?: string }, text: string) => {
-    const { provider, apiKey, baseUrl, model, voice } = config
-    if (provider === 'ollama') throw mediaUnsupported(provider, 'tts')
+    const { apiKey, baseUrl, model, voice } = config
+    const provider = config.provider
+    if (wireOf(provider) === 'ollama') throw mediaUnsupported(provider, 'tts')
     const url = `${cleanUrl(baseUrl)}/v1/audio/speech`
     try {
       const response = await request({ url }, {
@@ -344,8 +350,9 @@ export function initAIService() {
   })
 
   ipcMain.handle('call-asr', async (_e, config: AIServiceConfig, audioBase64: string) => {
-    const { provider, apiKey, baseUrl, model } = config
-    if (provider === 'ollama') throw mediaUnsupported(provider, 'asr')
+    const { apiKey, baseUrl, model } = config
+    const provider = config.provider
+    if (wireOf(provider) === 'ollama') throw mediaUnsupported(provider, 'asr')
     const url = `${cleanUrl(baseUrl)}/v1/audio/transcriptions`
     try {
       const form = new FormData()
@@ -361,6 +368,33 @@ export function initAIService() {
     } catch (e: any) {
       if (e.name === 'AbortError') throw e
       throw new Error(`ASR Failed: ${extractErrorMessage(e)}`)
+    }
+  })
+
+  // Fetch the vendor's model list (Cherry Studio style 获取模型列表).
+  ipcMain.handle('list-models', async (_e, config: AIServiceConfig) => {
+    const { provider, apiKey, baseUrl } = config
+    const wire = wireOf(provider)
+    try {
+      if (wire === 'ollama') {
+        const response = await axios.get(`${cleanUrl(baseUrl)}/api/tags`, { timeout: 10000 })
+        return ((response.data?.models || []) as Array<{ name: string }>).map(m => m.name)
+      }
+      const headers: Record<string, string> =
+        wire === 'anthropic'
+          ? { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' }
+          : { 'Authorization': `Bearer ${apiKey}` }
+      const url = wire === 'anthropic'
+        ? `${cleanUrl(baseUrl)}/v1/models`
+        : `${cleanUrl(baseUrl)}/v1/models`
+      const response = await axios.get(url, { headers, timeout: 15000 })
+      const raw = response.data?.data || response.data?.models || []
+      return (raw as Array<{ id?: string; name?: string }>)
+        .map(m => String(m.id || m.name || ''))
+        .filter(id => id !== '')
+        .sort()
+    } catch (e: any) {
+      throw new Error(`获取模型列表失败: ${extractErrorMessage(e)}`)
     }
   })
 }
