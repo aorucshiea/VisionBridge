@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import {
-  Plus, Trash2, ArrowUp, ArrowDown, ChevronDown, Check, Layers, Pencil, Puzzle, Download, Radar,
+  Plus, Trash2, ArrowUp, ArrowDown, ChevronDown, Check, Layers, Pencil, Puzzle, Download,
 } from 'lucide-react'
 import type { AppSettings, CustomNodeKind, NodeApi, Pipeline, PipelineNode, ThemeConfig, TestStatus } from '../../types'
 import type { TranslationDict } from '../../i18n'
@@ -43,7 +43,6 @@ const PipelineBuilder: React.FC<Props> = ({ settings, onPatch, onNotify, theme, 
   const [draft, setDraft] = useState<Pipeline | null>(null)
   const [expandedNode, setExpandedNode] = useState<string | null>(null)
   const [nodeTest, setNodeTest] = useState<Record<string, { status: TestStatus; message: string }>>({})
-  const [nodeModels, setNodeModels] = useState<Record<string, string[]>>({})
   const [probeNode, setProbeNode] = useState<PipelineNode | null>(null)
   const [showApiKey, setShowApiKey] = useState<Record<string, boolean>>({})
   const [newKindOpen, setNewKindOpen] = useState(false)
@@ -111,22 +110,6 @@ const PipelineBuilder: React.FC<Props> = ({ settings, onPatch, onNotify, theme, 
   const removeNode = (id: string) => {
     if (!draft) return
     setDraft({ ...draft, nodes: draft.nodes.filter(n => n.id !== id) })
-  }
-
-  const fetchNodeModels = async (node: PipelineNode) => {
-    const key = `${node.provider}|${node.baseUrl}`
-    setNodeTest(prev => ({ ...prev, [node.id]: { status: 'testing', message: t('testing') } }))
-    try {
-      const models: string[] = await window.ipcRenderer.listModels({
-        provider: node.provider, apiKey: node.apiKey, baseUrl: node.baseUrl, model: '',
-      })
-      setNodeModels(prev => ({ ...prev, [key]: models }))
-      setNodeTest(prev => ({ ...prev, [node.id]: { status: 'success', message: t('fetchModels') + ' · ' + models.length } }))
-    } catch (error: any) {
-      setNodeTest(prev => ({ ...prev, [node.id]: { status: 'error', message: `${t('fetchModelsFailed')}${error.message}` } }))
-    } finally {
-      window.setTimeout(() => setNodeTest(prev => ({ ...prev, [node.id]: { status: 'idle', message: '' } })), 4000)
-    }
   }
 
   const testNode = async (node: PipelineNode) => {
@@ -250,29 +233,16 @@ const PipelineBuilder: React.FC<Props> = ({ settings, onPatch, onNotify, theme, 
                       theme={theme}
                     />
                     <datalist id={`models-node-${node.id}`}>
-                      {[
-                        ...(presetOf(node.provider)?.models || []),
-                        ...(nodeModels[`${node.provider}|${node.baseUrl}`] || []),
-                      ].map(m => <option key={m} value={m} />)}
+                      {(presetOf(node.provider)?.models || []).map(m => <option key={m} value={m} />)}
                     </datalist>
                   </div>
+                  {/* single entry point: the model list (catalog + live) */}
                   <button
                     type="button"
                     onClick={() => setProbeNode(node)}
                     aria-label={t('probeModels')}
                     title={t('probeModels')}
                     className="w-8 h-10 shrink-0 flex items-center justify-center rounded-field border transition-colors duration-150 ease-out-quart"
-                    style={{ backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: toneColor }}
-                  >
-                    <Radar size={14} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void fetchNodeModels(node)}
-                    disabled={test.status === 'testing'}
-                    aria-label={t('fetchModels')}
-                    title={t('fetchModels')}
-                    className="w-8 h-10 shrink-0 flex items-center justify-center rounded-field border transition-colors duration-150 ease-out-quart disabled:opacity-50"
                     style={{ backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.textSecondary }}
                   >
                     <Download size={14} />

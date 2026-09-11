@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
-import { Settings as SettingsIcon, ScanLine, MessageSquare, Save, Check, Minus, Square, X as CloseIcon } from 'lucide-react'
+import { Settings as SettingsIcon, ScanLine, MessageSquare, Save, Check, Minus, Square, X as CloseIcon, Cpu, Workflow, SlidersHorizontal, FolderOpen } from 'lucide-react'
 import ScreenshotMask from './components/ScreenshotMask'
 import ResultView from './components/ResultView'
 import TextChat from './components/TextChat'
@@ -70,6 +70,15 @@ const SECTION_KEYS: Record<SectionType, Record<keyof SectionModel, keyof AppSett
   llm2: { provider: 'llm2Provider', baseUrl: 'llm2BaseUrl', model: 'llm2Model', apiKey: 'llm2ApiKey', translatePrompt: 'llm2TranslatePrompt', explainPrompt: 'llm2ExplainPrompt', jsonPrompt: 'vlm2JsonPrompt' },
 }
 
+type SettingsSectionId = 'model' | 'pipeline' | 'general' | 'config'
+
+const SETTINGS_SECTIONS: Array<{ id: SettingsSectionId; icon: ReactNode; labelKey: 'sectionModel' | 'sectionPipeline' | 'sectionGeneral' | 'sectionConfig' }> = [
+  { id: 'model', icon: <Cpu size={17} />, labelKey: 'sectionModel' },
+  { id: 'pipeline', icon: <Workflow size={17} />, labelKey: 'sectionPipeline' },
+  { id: 'general', icon: <SlidersHorizontal size={17} />, labelKey: 'sectionGeneral' },
+  { id: 'config', icon: <FolderOpen size={17} />, labelKey: 'sectionConfig' },
+]
+
 const TEST_STATUS_INIT: Record<TestTarget, TestStatus> = { vlm: 'idle', ocr: 'idle', llm: 'idle', vlm2: 'idle', llm2: 'idle' }
 
 /** The app mark: a capture frame with a marker stroke through the middle. */
@@ -102,6 +111,7 @@ function App() {
 
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS)
   const [activeTab, setActiveTab] = useState<'translate' | 'settings'>('translate')
+  const [settingsSection, setSettingsSection] = useState<SettingsSectionId>('model')
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
   const [testStatus, setTestStatus] = useState<Record<TestTarget, TestStatus>>(TEST_STATUS_INIT)
   const [testMessage, setTestMessage] = useState<Record<TestTarget, string>>({ vlm: '', ocr: '', llm: '', vlm2: '', llm2: '' })
@@ -623,111 +633,157 @@ function App() {
           </div>
           )
         ) : (
-          <div className="mx-auto w-full max-w-[560px] px-5 pt-5 pb-8 space-y-5 animate-rise">
-            <PipelineSelector
-              mode={settings.mode}
-              onSelect={(m) => setSettings(prev => ({ ...prev, mode: m }))}
-              theme={currentTheme}
-              t={t}
-            />
+          <div className="h-full flex animate-rise">
+            {/* Left rail — the desktop-app settings pattern (Windows 11 设置 /
+                VS Code style): one visible level of categories, no long hunt. */}
+            <nav
+              aria-label={t('settings')}
+              className="w-[92px] shrink-0 border-r px-2.5 py-4 space-y-1"
+              style={{ borderColor: currentTheme.hairline, backgroundColor: currentTheme.inputBg }}
+            >
+              {SETTINGS_SECTIONS.map(s => {
+                const selected = settingsSection === s.id
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    aria-current={selected ? 'page' : undefined}
+                    onClick={() => setSettingsSection(s.id)}
+                    className="w-full flex flex-col items-center gap-1.5 px-1.5 py-2.5 rounded-[10px] transition-[background-color,color] duration-base ease-out-quart active:scale-[0.98]"
+                    style={{
+                      backgroundColor: selected ? currentTheme.card : 'transparent',
+                      color: selected ? currentTheme.primary : currentTheme.textSecondary,
+                      boxShadow: selected ? `0 1px 2px ${currentTheme.hairline}` : undefined,
+                    }}
+                  >
+                    {s.icon}
+                    <span className="text-[10.5px] font-semibold leading-none">{t(s.labelKey)}</span>
+                  </button>
+                )
+              })}
+            </nav>
 
-            {/* Hybrid presets sit between basic modes and the advanced toggle. */}
-            <OfficialPresets
-              mode={settings.mode}
-              onSelect={(m) => setSettings(prev => ({ ...prev, mode: m }))}
-              theme={currentTheme}
-              t={t}
-            />
+            <div className="flex-1 min-w-0 overflow-y-auto custom-scrollbar px-4 py-4 space-y-5">
+              {settingsSection === 'model' && (
+                <>
+                  <PipelineSelector
+                    mode={settings.mode}
+                    onSelect={(m) => setSettings(prev => ({ ...prev, mode: m }))}
+                    theme={currentTheme}
+                    t={t}
+                  />
 
-            <AdvancedModeCard
-              advancedMode={settings.advancedMode}
-              onToggle={(v) => setSettings(prev => ({ ...prev, advancedMode: v }))}
-              theme={currentTheme}
-              t={t}
-            />
+                  {/* Hybrid presets sit between basic modes and the advanced toggle. */}
+                  <OfficialPresets
+                    mode={settings.mode}
+                    onSelect={(m) => setSettings(prev => ({ ...prev, mode: m }))}
+                    theme={currentTheme}
+                    t={t}
+                  />
 
-            {settings.advancedMode && (
-              <PipelineBuilder
-                settings={settings}
-                onPatch={(patch) => setSettings(prev => ({ ...prev, ...patch }))}
-                onNotify={tell}
-                theme={currentTheme}
-                t={t}
-              />
-            )}
+                  {settings.mode === 'VLM' && renderSection('vlm')}
 
-            {settings.mode === 'CUSTOM' && !settings.advancedMode && (
-              <div
-                className="px-4 py-3 rounded-card border text-[11.5px] leading-relaxed"
-                style={{
-                  backgroundColor: tint(currentTheme.primary, currentTheme.card, 0.06),
-                  borderColor: tint(currentTheme.primary, currentTheme.card, 0.24),
-                  color: currentTheme.textSecondary,
-                }}
-              >
-                {t('customPipelineActive')}
-              </div>
-            )}
+                  {settings.mode === 'TEXT' && renderSection('llm')}
 
-            {settings.mode === 'VLM' && renderSection('vlm')}
+                  {settings.mode === 'OCR+LLM' && (
+                    <div className="space-y-5">
+                      {renderSection('ocr')}
+                      {renderSection('llm')}
+                    </div>
+                  )}
 
-            {settings.mode === 'TEXT' && renderSection('llm')}
+                  {settings.mode === 'VLM+LLM' && (
+                    <div className="space-y-5">
+                      {renderSection('vlm2')}
+                      {renderSection('llm2')}
+                    </div>
+                  )}
 
-            {settings.mode === 'OCR+LLM' && (
-              <div className="space-y-5">
-                {renderSection('ocr')}
-                {renderSection('llm')}
-              </div>
-            )}
+                  {settings.mode === 'CUSTOM' && (
+                    <div
+                      className="px-4 py-3 rounded-card border text-[11.5px] leading-relaxed"
+                      style={{
+                        backgroundColor: tint(currentTheme.primary, currentTheme.card, 0.06),
+                        borderColor: tint(currentTheme.primary, currentTheme.card, 0.24),
+                        color: currentTheme.textSecondary,
+                      }}
+                    >
+                      {t('customPipelineActive')}
+                    </div>
+                  )}
+                </>
+              )}
 
-            {settings.mode === 'VLM+LLM' && (
-              <div className="space-y-5">
-                {renderSection('vlm2')}
-                {renderSection('llm2')}
-              </div>
-            )}
+              {settingsSection === 'pipeline' && (
+                <>
+                  <AdvancedModeCard
+                    advancedMode={settings.advancedMode}
+                    onToggle={(v) => setSettings(prev => ({ ...prev, advancedMode: v }))}
+                    theme={currentTheme}
+                    t={t}
+                  />
 
-            <ValidationCard theme={currentTheme} t={t} />
+                  {settings.advancedMode && (
+                    <PipelineBuilder
+                      settings={settings}
+                      onPatch={(patch) => setSettings(prev => ({ ...prev, ...patch }))}
+                      onNotify={tell}
+                      theme={currentTheme}
+                      t={t}
+                    />
+                  )}
+                </>
+              )}
 
-            <SavedConfigs
-              show={showSavedConfigs}
-              onToggleShow={() => setShowSavedConfigs(!showSavedConfigs)}
-              configName={configName}
-              onConfigNameChange={setConfigName}
-              configTags={configTags}
-              customTagInput={customTagInput}
-              onCustomTagInputChange={setCustomTagInput}
-              onAddTag={(tag) => setConfigTags(prev => prev.includes(tag) ? prev : [...prev, tag])}
-              onRemoveTag={(tag) => setConfigTags(prev => prev.filter(x => x !== tag))}
-              onAddCustomTag={() => {
-                const tag = customTagInput.trim()
-                if (tag && !configTags.includes(tag)) {
-                  setConfigTags(prev => [...prev, tag])
-                  setCustomTagInput('')
-                }
-              }}
-              onSave={handleSaveConfiguration}
-              configurations={savedConfigurations}
-              onApply={handleLoadConfiguration}
-              onDelete={handleDeleteConfiguration}
-              theme={currentTheme}
-              t={t}
-            />
+              {settingsSection === 'general' && (
+                <>
+                  <AppearanceSection
+                    settings={settings}
+                    onPatch={(patch) => setSettings(prev => ({ ...prev, ...patch }))}
+                    theme={currentTheme}
+                    t={t}
+                  />
 
-            <AppearanceSection
-              settings={settings}
-              onPatch={(patch) => setSettings(prev => ({ ...prev, ...patch }))}
-              theme={currentTheme}
-              t={t}
-            />
+                  <ToolbarActionsSection
+                    settings={settings}
+                    onPatch={(patch) => setSettings(prev => ({ ...prev, ...patch }))}
+                    theme={currentTheme}
+                    t={t}
+                  />
+                </>
+              )}
 
-            <ToolbarActionsSection
-              settings={settings}
-              onPatch={(patch) => setSettings(prev => ({ ...prev, ...patch }))}
-              theme={currentTheme}
-              t={t}
-            />
+              {settingsSection === 'config' && (
+                <>
+                  <ValidationCard theme={currentTheme} t={t} />
 
+                  <SavedConfigs
+                    show={showSavedConfigs}
+                    onToggleShow={() => setShowSavedConfigs(!showSavedConfigs)}
+                    configName={configName}
+                    onConfigNameChange={setConfigName}
+                    configTags={configTags}
+                    customTagInput={customTagInput}
+                    onCustomTagInputChange={setCustomTagInput}
+                    onAddTag={(tag) => setConfigTags(prev => prev.includes(tag) ? prev : [...prev, tag])}
+                    onRemoveTag={(tag) => setConfigTags(prev => prev.filter(x => x !== tag))}
+                    onAddCustomTag={() => {
+                      const tag = customTagInput.trim()
+                      if (tag && !configTags.includes(tag)) {
+                        setConfigTags(prev => [...prev, tag])
+                        setCustomTagInput('')
+                      }
+                    }}
+                    onSave={handleSaveConfiguration}
+                    configurations={savedConfigurations}
+                    onApply={handleLoadConfiguration}
+                    onDelete={handleDeleteConfiguration}
+                    theme={currentTheme}
+                    t={t}
+                  />
+                </>
+              )}
+            </div>
           </div>
         )}
       </main>

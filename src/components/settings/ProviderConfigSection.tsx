@@ -1,5 +1,5 @@
 import React, { useId, useState } from 'react'
-import { ChevronDown, Download, Radar } from 'lucide-react'
+import { ChevronDown, Download } from 'lucide-react'
 import type { ThemeConfig, TestStatus } from '../../types'
 import type { TranslationDict } from '../../i18n'
 import { PROVIDER_PRESETS, PROVIDER_GROUPS, GROUP_LABEL_KEY, presetOf } from '../../lib/providers'
@@ -67,34 +67,15 @@ const ProviderConfigSection: React.FC<ProviderConfigSectionProps> = (props) => {
 
   const toneColor = tone === 'accent' ? theme.accent : theme.primary
   const datalistId = `models-${useId()}`
-  const [fetched, setFetched] = useState<Record<string, string[]>>({})
-  const [fetchState, setFetchState] = useState<Record<string, 'idle' | 'loading' | 'error'>>({})
-  const [fetchError, setFetchError] = useState('')
   const [showProbe, setShowProbe] = useState(false)
 
   const preset = presetOf(section.provider)
-  const cacheKey = `${section.provider}|${section.baseUrl}`
-  const suggestions = [...new Set([...(preset?.models || []), ...(fetched[cacheKey] || [])])]
+  const suggestions = preset?.models || []
 
   const handleProviderChange = (id: string) => {
     const target = presetOf(id)
     // Picking a vendor autofills its API host; the key and model stay yours.
     onPatch(target && target.baseUrl ? { provider: id, baseUrl: target.baseUrl } : { provider: id })
-  }
-
-  const fetchModels = async () => {
-    setFetchState(prev => ({ ...prev, [cacheKey]: 'loading' }))
-    setFetchError('')
-    try {
-      const models: string[] = await window.ipcRenderer.listModels({
-        provider: section.provider, apiKey: section.apiKey, baseUrl: section.baseUrl, model: '',
-      })
-      setFetched(prev => ({ ...prev, [cacheKey]: models }))
-      setFetchState(prev => ({ ...prev, [cacheKey]: 'idle' }))
-    } catch (error: any) {
-      setFetchError(error?.message || String(error))
-      setFetchState(prev => ({ ...prev, [cacheKey]: 'error' }))
-    }
   }
 
   const providerSelect = (
@@ -120,19 +101,17 @@ const ProviderConfigSection: React.FC<ProviderConfigSectionProps> = (props) => {
     </datalist>
   )
 
+  /** Single entry point for models: opens the list (catalog + vendor live). */
   const fetchButton = (
     <button
       type="button"
-      onClick={() => void fetchModels()}
-      disabled={fetchState[cacheKey] === 'loading'}
-      aria-label={t('fetchModels')}
-      title={t('fetchModels')}
-      className="w-10 h-10 shrink-0 flex items-center justify-center rounded-field border transition-colors duration-150 ease-out-quart active:scale-[0.97] disabled:opacity-50"
+      onClick={() => setShowProbe(true)}
+      aria-label={t('probeModels')}
+      title={t('probeModels')}
+      className="w-10 h-10 shrink-0 flex items-center justify-center rounded-field border transition-colors duration-150 ease-out-quart active:scale-[0.97]"
       style={{ backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.textSecondary }}
     >
-      {fetchState[cacheKey] === 'loading'
-        ? <span className="w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin opacity-70" />
-        : <Download size={15} />}
+      <Download size={15} />
     </button>
   )
 
@@ -171,24 +150,11 @@ const ProviderConfigSection: React.FC<ProviderConfigSectionProps> = (props) => {
           <div className="flex gap-2">
             <div className="flex-[1.4] min-w-0">{modelInput()}</div>
             {fetchButton}
-            <button
-              type="button"
-              onClick={() => setShowProbe(true)}
-              aria-label={t('probeModels')}
-              title={t('probeModels')}
-              className="w-10 h-10 shrink-0 flex items-center justify-center rounded-field border transition-colors duration-150 ease-out-quart active:scale-[0.97]"
-              style={{ backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: toneColor }}
-            >
-              <Radar size={15} />
-            </button>
             {testStyle === 'inline'
               ? <TestButton status={testStatus} onClick={onTest} label={t('test')} theme={theme} />
               : null}
           </div>
           <TestStatusText status={testStatus} message={testMessage} />
-          {fetchError ? (
-            <p className="text-xs leading-relaxed" style={{ color: theme.danger }}>{fetchError}</p>
-          ) : null}
         </div>
       ) : (
         <div>
