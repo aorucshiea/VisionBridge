@@ -54,7 +54,8 @@ app.whenReady().then(async () => {
 
   console.log('SCENARIO mode=' + MODE + ' advanced=' + ADV)
   console.log('TABS ' + JSON.stringify(tabs))
-  console.log('HAS-OFFICIAL-PRESETS ' + body.includes('默认预设管道'))
+  console.log('HAS-OFFICIAL-PRESETS ' + body.includes('混合模式'))
+  console.log('ORDER-OK ' + String(body.indexOf('基础模式') < body.indexOf('混合模式') && body.indexOf('混合模式') < body.indexOf('高级模式')))
   console.log('HAS-CUSTOM-SECTION ' + body.includes('自定义管道'))
   console.log('HAS-CHAT-UI ' + (body.includes('输入问题') || body.includes('对话')))
   console.log('HAS-LLM-SECTION ' + body.includes('语言模型'))

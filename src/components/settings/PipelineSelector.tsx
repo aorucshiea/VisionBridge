@@ -5,8 +5,8 @@ import { tint } from '../../theme/themes'
 import type { TFunc } from './ui'
 
 /**
- * The two always-available modes. OCR+LLM / VLM+LLM stay official presets
- * inside advanced mode; CUSTOM pipelines live in the builder.
+ * The two basic modes. Hybrid presets (OCR+LLM / VLM+LLM) sit between this
+ * section and the advanced toggle; custom pipelines live in advanced mode.
  */
 const MODES: Array<{
   mode: 'VLM' | 'TEXT'
@@ -18,7 +18,7 @@ const MODES: Array<{
   { mode: 'TEXT', icon: <MessageSquare size={15} />, labelKey: 'textMode', descKey: 'textModeDesc' },
 ]
 
-function Switch({ checked, onChange, label, theme }: {
+export function Switch({ checked, onChange, label, theme }: {
   checked: boolean
   onChange: (v: boolean) => void
   label: string
@@ -45,18 +45,13 @@ function Switch({ checked, onChange, label, theme }: {
   )
 }
 
-/**
- * Mode selector (multimodal / text-only) + the advanced-mode switch.
- * OCR+LLM and VLM+LLM live in advanced mode as official preset pipelines.
- */
+/** Basic modes only. */
 const PipelineSelector: React.FC<{
   mode: PipelineMode
-  advancedMode: boolean
   onSelect: (m: 'VLM' | 'TEXT') => void
-  onToggleAdvanced: (v: boolean) => void
   theme: ThemeConfig
   t: TFunc
-}> = ({ mode, advancedMode, onSelect, onToggleAdvanced, theme, t }) => {
+}> = ({ mode, onSelect, theme, t }) => {
   const active = MODES.find(m => m.mode === mode)
   const descKey = active
     ? active.descKey
@@ -65,7 +60,7 @@ const PipelineSelector: React.FC<{
   return (
     <section className="space-y-2.5">
       <div className="flex items-baseline justify-between gap-3">
-        <h2 className="eyebrow shrink-0" style={{ color: theme.textSecondary }}>{t('pipeline')}</h2>
+        <h2 className="eyebrow shrink-0" style={{ color: theme.textSecondary }}>{t('basicModes')}</h2>
         <p className="text-[11px] leading-relaxed text-right" style={{ color: theme.textMuted }}>
           {t(descKey)}
         </p>
@@ -73,7 +68,7 @@ const PipelineSelector: React.FC<{
 
       <div
         role="tablist"
-        aria-label={t('pipeline')}
+        aria-label={t('basicModes')}
         className="grid grid-cols-2 gap-1 p-1 rounded-[11px] border"
         style={{ backgroundColor: theme.inputBg, borderColor: theme.inputBorder }}
       >
@@ -99,25 +94,34 @@ const PipelineSelector: React.FC<{
           )
         })}
       </div>
-
-      {/* Advanced mode: exposes the node palette and custom pipelines. */}
-      <div
-        className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-[11px] border"
-        style={{ backgroundColor: theme.card, borderColor: theme.hairline }}
-      >
-        <div className="flex-1 min-w-0">
-          <p className="text-[12px] font-semibold" style={{ color: theme.text }}>{t('advancedMode')}</p>
-          <p className="text-[10.5px] leading-relaxed" style={{ color: theme.textMuted }}>{t('advancedModeDesc')}</p>
-        </div>
-        <Switch checked={advancedMode} onChange={onToggleAdvanced} label={t('advancedMode')} theme={theme} />
-        <ChevronDown
-          size={14}
-          aria-hidden
-          className="transition-transform duration-base ease-out-quart"
-          style={{ color: theme.textMuted, transform: advancedMode ? 'rotate(0deg)' : 'rotate(-90deg)' }}
-        />
-      </div>
     </section>
+  )
+}
+
+/** The advanced-mode card; rendered between hybrid presets and the builder. */
+export function AdvancedModeCard({ advancedMode, onToggle, theme, t }: {
+  advancedMode: boolean
+  onToggle: (v: boolean) => void
+  theme: ThemeConfig
+  t: TFunc
+}) {
+  return (
+    <div
+      className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-[11px] border"
+      style={{ backgroundColor: theme.card, borderColor: theme.hairline }}
+    >
+      <div className="flex-1 min-w-0">
+        <p className="text-[12px] font-semibold" style={{ color: theme.text }}>{t('advancedMode')}</p>
+        <p className="text-[10.5px] leading-relaxed" style={{ color: theme.textMuted }}>{t('advancedModeDesc')}</p>
+      </div>
+      <Switch checked={advancedMode} onChange={onToggle} label={t('advancedMode')} theme={theme} />
+      <ChevronDown
+        size={14}
+        aria-hidden
+        className="transition-transform duration-base ease-out-quart"
+        style={{ color: theme.textMuted, transform: advancedMode ? 'rotate(0deg)' : 'rotate(-90deg)' }}
+      />
+    </div>
   )
 }
 

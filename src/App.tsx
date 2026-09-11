@@ -4,7 +4,7 @@ import { Settings as SettingsIcon, ScanLine, MessageSquare, Save, Check, Minus, 
 import ScreenshotMask from './components/ScreenshotMask'
 import ResultView from './components/ResultView'
 import TextChat from './components/TextChat'
-import PipelineSelector from './components/settings/PipelineSelector'
+import PipelineSelector, { AdvancedModeCard } from './components/settings/PipelineSelector'
 import PipelineBuilder from './components/settings/PipelineBuilder'
 import OfficialPresets from './components/settings/OfficialPresets'
 import ProviderConfigSection, { type SectionModel } from './components/settings/ProviderConfigSection'
@@ -596,17 +596,22 @@ function App() {
           <div className="mx-auto w-full max-w-[560px] px-5 pt-5 pb-8 space-y-5 animate-rise">
             <PipelineSelector
               mode={settings.mode}
-              advancedMode={settings.advancedMode}
               onSelect={(m) => setSettings(prev => ({ ...prev, mode: m }))}
-              onToggleAdvanced={(v) => setSettings(prev => ({ ...prev, advancedMode: v }))}
               theme={currentTheme}
               t={t}
             />
 
-            {/* Preset pipelines are always visible; advanced mode gates only custom pipelines. */}
+            {/* Hybrid presets sit between basic modes and the advanced toggle. */}
             <OfficialPresets
               mode={settings.mode}
               onSelect={(m) => setSettings(prev => ({ ...prev, mode: m }))}
+              theme={currentTheme}
+              t={t}
+            />
+
+            <AdvancedModeCard
+              advancedMode={settings.advancedMode}
+              onToggle={(v) => setSettings(prev => ({ ...prev, advancedMode: v }))}
               theme={currentTheme}
               t={t}
             />

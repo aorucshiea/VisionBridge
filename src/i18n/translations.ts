@@ -118,6 +118,7 @@ export interface TranslationDict {
   advancedMode: string
   advancedModeDesc: string
   multimodal: string
+  basicModes: string
   textMode: string
   textModeDesc: string
   textModeNoCapture: string
@@ -280,11 +281,12 @@ export const translations: Record<'zh' | 'en', TranslationDict> = {
     advancedMode: '高级模式',
     advancedModeDesc: '自定义节点与管道',
     multimodal: '多模态',
+    basicModes: '基础模式',
     textMode: '仅文字',
     textModeDesc: '直接与语言模型对话，不支持截图',
     textModeNoCapture: '仅文字模式不支持截图，切换到多模态可截图识别',
     textChatEmpty: '输入问题，直接与语言模型对话',
-    officialPresets: '默认预设管道',
+    officialPresets: '混合模式',
     chat: '对话',
     customPipelines: '自定义管道',
     newPipeline: '新建管道',
@@ -440,11 +442,12 @@ export const translations: Record<'zh' | 'en', TranslationDict> = {
     advancedMode: 'Advanced',
     advancedModeDesc: 'Compose nodes into custom pipelines',
     multimodal: 'Multimodal',
+    basicModes: 'Basic modes',
     textMode: 'Text only',
     textModeDesc: 'Chat with a language model directly — no screenshots',
     textModeNoCapture: 'Text mode does not support screenshots — switch to Multimodal to capture',
     textChatEmpty: 'Type below to chat with the model',
-    officialPresets: 'Default presets',
+    officialPresets: 'Hybrid modes',
     chat: 'Chat',
     customPipelines: 'Custom Pipelines',
     newPipeline: 'New Pipeline',
