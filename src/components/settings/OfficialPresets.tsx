@@ -5,8 +5,8 @@ import { tint } from '../../theme/themes'
 import type { TFunc } from './ui'
 
 /**
- * Official preset pipelines, available only in advanced mode. Their config
- * lives in the legacy sections below; these cards just switch them on.
+ * Default preset pipelines (OCR+LLM, VLM+LLM) — always visible in settings.
+ * Their config lives in the legacy sections below; these cards switch them on.
  */
 const PRESETS: Array<{
   mode: Exclude<PipelineMode, 'VLM' | 'TEXT' | 'CUSTOM'>

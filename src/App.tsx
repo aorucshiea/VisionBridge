@@ -603,14 +603,13 @@ function App() {
               t={t}
             />
 
-            {settings.advancedMode && (
-              <OfficialPresets
-                mode={settings.mode}
-                onSelect={(m) => setSettings(prev => ({ ...prev, mode: m }))}
-                theme={currentTheme}
-                t={t}
-              />
-            )}
+            {/* Preset pipelines are always visible; advanced mode gates only custom pipelines. */}
+            <OfficialPresets
+              mode={settings.mode}
+              onSelect={(m) => setSettings(prev => ({ ...prev, mode: m }))}
+              theme={currentTheme}
+              t={t}
+            />
 
             {settings.advancedMode && (
               <PipelineBuilder
