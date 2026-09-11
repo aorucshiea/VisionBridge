@@ -10,6 +10,7 @@
     "build:optimized": "tsc && vite build && electron-builder && node scripts/optimize-dist.js",
     "build:web": "vite build",
     "preview": "vite preview",
+    "shots": "electron scripts",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit"
   },

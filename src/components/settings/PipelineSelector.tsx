@@ -1,38 +1,65 @@
 import React from 'react'
-import { Activity, Cpu, Search, Zap } from 'lucide-react'
+import { ScanEye, ScanText, Sparkles } from 'lucide-react'
 import type { PipelineMode, ThemeConfig } from '../../types'
+import { tint } from '../../theme/themes'
 import type { TFunc } from './ui'
 
-const PIPELINES: Array<{ mode: PipelineMode; icon: React.ReactNode; label: string }> = [
-  { mode: 'VLM', icon: <Cpu size={18} />, label: 'VLM' },
-  { mode: 'OCR+LLM', icon: <Search size={18} />, label: 'OCR+LLM' },
-  { mode: 'VLM+LLM', icon: <Zap size={18} />, label: 'VLM+LLM' },
+const PIPELINES: Array<{
+  mode: PipelineMode
+  icon: React.ReactNode
+  label: string
+  descKey: 'pipelineDescVlm' | 'pipelineDescOcr' | 'pipelineDescVlmLlm'
+}> = [
+  { mode: 'VLM', icon: <ScanEye size={15} />, label: 'VLM', descKey: 'pipelineDescVlm' },
+  { mode: 'OCR+LLM', icon: <ScanText size={15} />, label: 'OCR + LLM', descKey: 'pipelineDescOcr' },
+  { mode: 'VLM+LLM', icon: <Sparkles size={15} />, label: 'VLM + LLM', descKey: 'pipelineDescVlmLlm' },
 ]
 
-const PipelineSelector: React.FC<{ mode: PipelineMode; onSelect: (m: PipelineMode) => void; theme: ThemeConfig; t: TFunc }> = ({ mode, onSelect, theme, t }) => {
+/**
+ * Segmented control. The active segment carries its own raised surface, so
+ * the selection stays legible without a second accent colour.
+ */
+const PipelineSelector: React.FC<{
+  mode: PipelineMode
+  onSelect: (m: PipelineMode) => void
+  theme: ThemeConfig
+  t: TFunc
+}> = ({ mode, onSelect, theme, t }) => {
+  const active = PIPELINES.find(p => p.mode === mode) || PIPELINES[0]
+
   return (
-    <section className="space-y-3">
-      <div className="flex items-center gap-2 px-1">
-        <Activity size={14} style={{ color: theme.primary }} />
-        <h2 className="text-xs font-heading font-bold uppercase tracking-wider" style={{ color: theme.textSecondary }}>
-          {t('pipeline')}
-        </h2>
+    <section className="space-y-2.5">
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="eyebrow shrink-0" style={{ color: theme.textSecondary }}>{t('pipeline')}</h2>
+        <p className="text-[11px] leading-relaxed text-right" style={{ color: theme.textMuted }}>
+          {t(active.descKey)}
+        </p>
       </div>
-      <div className="grid grid-cols-3 gap-2 p-1.5 rounded-xl border transition-all duration-200" style={{ backgroundColor: 'rgba(255,255,255,0.1)', borderColor: theme.border }}>
+
+      <div
+        role="tablist"
+        aria-label={t('pipeline')}
+        className="grid grid-cols-3 gap-1 p-1 rounded-[11px] border"
+        style={{ backgroundColor: theme.inputBg, borderColor: theme.inputBorder }}
+      >
         {PIPELINES.map(p => {
-          const active = mode === p.mode
+          const selected = p.mode === mode
           return (
             <button
               key={p.mode}
+              role="tab"
+              aria-selected={selected}
               onClick={() => onSelect(p.mode)}
-              className={`flex flex-col items-center gap-2 py-4 rounded-lg transition-all duration-200 ${active ? 'shadow-soft' : 'hover:bg-white/50 dark:hover:bg-white/5'}`}
+              className="flex items-center justify-center gap-1.5 py-2 rounded-[8px] text-[11px] font-semibold tracking-wide border transition-[background-color,border-color,color,transform] duration-base ease-out-quart active:scale-[0.98]"
               style={{
-                backgroundColor: active ? theme.card : 'transparent',
-                color: active ? theme.primary : theme.textSecondary,
+                color: selected ? theme.primary : theme.textSecondary,
+                backgroundColor: selected ? tint(theme.primary, theme.card, 0.08) : 'transparent',
+                borderColor: selected ? tint(theme.primary, theme.card, 0.3) : 'transparent',
+                boxShadow: selected ? `0 1px 2px ${theme.hairline}` : undefined,
               }}
             >
               {p.icon}
-              <span className="text-xs font-heading font-semibold">{p.label}</span>
+              <span>{p.label}</span>
             </button>
           )
         })}

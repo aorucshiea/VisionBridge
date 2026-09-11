@@ -39,6 +39,9 @@ fix-*.js
 *.tmp
 *.temp
 
+# Visual QA captures (scripts/shoot.js)
+preview/
+
 # Backup directories
 backup_*/
 *.bak

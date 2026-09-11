@@ -1,5 +1,4 @@
 import React from 'react'
-import { Palette, Zap } from 'lucide-react'
 import type { ThemeConfig, ThemeName } from '../../types'
 import { themes } from '../../theme/themes'
 import type { TFunc } from './ui'
@@ -15,78 +14,129 @@ interface AppearanceSectionProps {
   t: TFunc
 }
 
-const AppearanceSection: React.FC<AppearanceSectionProps> = ({ settings, onPatch, theme, t }) => {
+function Toggle({ on, onToggle, theme }: { on: boolean; onToggle: () => void; theme: ThemeConfig }) {
   return (
-    <section className="space-y-3">
-      <div className="flex items-center gap-2 px-1">
-        <Zap size={14} style={{ color: theme.accent }} />
-        <h2 className="text-xs font-heading font-bold uppercase tracking-wider" style={{ color: theme.textSecondary }}>
-          {t('features')}
-        </h2>
-      </div>
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      onClick={onToggle}
+      className="relative w-11 h-6 rounded-full shrink-0 transition-colors duration-base ease-out-quart"
+      style={{ backgroundColor: on ? theme.primary : theme.inputBorder }}
+    >
+      <span
+        className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform duration-base ease-out-quart"
+        style={{ transform: `translateX(${on ? '1.25rem' : '0'})`, boxShadow: '0 1px 3px rgba(0,0,0,0.25)' }}
+      />
+    </button>
+  )
+}
 
-      <div className="rounded-xl p-4 shadow-soft space-y-4 transition-all duration-200" style={{ backgroundColor: theme.card }}>
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold" style={{ color: theme.text }}>{t('textSelection')}</p>
-            <p className="text-xs" style={{ color: theme.textSecondary }}>{t('textSelectionDesc')}</p>
+/** Theme swatch: a miniature of the palette rather than just a colour dot. */
+function ThemeSwatch({ active, palette, label, onClick }: {
+  active: boolean
+  palette: ThemeConfig
+  label: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className="group relative flex flex-col gap-2 p-2.5 rounded-[11px] border text-left transition-[border-color,transform] duration-base ease-out-quart active:scale-[0.98]"
+      style={{
+        backgroundColor: palette.background,
+        borderColor: active ? palette.primary : palette.border,
+        boxShadow: active ? `0 0 0 1px ${palette.primary}` : undefined,
+      }}
+    >
+      <span
+        aria-hidden
+        className="block w-full h-7 rounded-md overflow-hidden border"
+        style={{ backgroundColor: palette.card, borderColor: palette.border }}
+      >
+        <span className="flex items-end gap-1 h-full px-2 pb-1.5">
+          <span className="h-1.5 rounded-full" style={{ width: '42%', backgroundColor: palette.text, opacity: 0.75 }} />
+          <span className="h-1.5 rounded-full flex-1" style={{ backgroundColor: palette.textMuted, opacity: 0.5 }} />
+          <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: palette.primary }} />
+        </span>
+      </span>
+      <span className="text-[11px] font-semibold leading-none" style={{ color: palette.text }}>
+        {label}
+      </span>
+    </button>
+  )
+}
+
+const AppearanceSection: React.FC<AppearanceSectionProps> = ({ settings, onPatch, theme, t }) => {
+  const languages: Array<{ id: 'zh' | 'en'; label: string }> = [
+    { id: 'zh', label: '中文' },
+    { id: 'en', label: 'English' },
+  ]
+
+  return (
+    <section className="space-y-2.5">
+      <h2 className="eyebrow" style={{ color: theme.textSecondary }}>{t('appearance')}</h2>
+
+      <div className="rounded-card border divide-y" style={{ backgroundColor: theme.card, borderColor: theme.hairline }}>
+        {/* Behaviour */}
+        <div className="flex items-center justify-between gap-4 px-4 py-3.5">
+          <div className="min-w-0">
+            <p className="text-[13px] font-semibold" style={{ color: theme.text }}>{t('textSelection')}</p>
+            <p className="text-[11px] mt-0.5" style={{ color: theme.textMuted }}>{t('textSelectionDesc')}</p>
           </div>
-          <button
-            onClick={() => onPatch({ enableTextSelection: !settings.enableTextSelection })}
-            className={`w-12 h-6 rounded-full transition-all duration-200 ${settings.enableTextSelection ? 'bg-primary-600' : 'bg-slate-200'}`}
-          >
-            <div className={`w-5 h-5 bg-white rounded-full shadow-soft transition-all duration-200 ${settings.enableTextSelection ? 'translate-x-6' : 'translate-x-0.5'}`} />
-          </button>
+          <Toggle
+            on={settings.enableTextSelection}
+            onToggle={() => onPatch({ enableTextSelection: !settings.enableTextSelection })}
+            theme={theme}
+          />
         </div>
-      </div>
 
-      <div className="rounded-xl p-4 shadow-soft space-y-4 transition-all duration-200" style={{ backgroundColor: theme.card }}>
-        <div className="flex items-center gap-2 mb-3">
-          <Palette size={14} style={{ color: theme.primary }} />
-          <h2 className="text-xs font-heading font-bold uppercase tracking-wider" style={{ color: theme.textSecondary }}>
-            {t('appearance')}
-          </h2>
+        {/* Palette */}
+        <div className="px-4 py-3.5 space-y-2.5">
+          <p className="eyebrow" style={{ color: theme.textMuted }}>{t('theme')}</p>
+          <div className="grid grid-cols-4 gap-2">
+            {Object.entries(themes).map(([key, palette]) => (
+              <ThemeSwatch
+                key={key}
+                active={settings.theme === key}
+                palette={palette}
+                label={settings.language === 'zh' ? palette.name : palette.nameEn}
+                onClick={() => onPatch({ theme: key as ThemeName })}
+              />
+            ))}
+          </div>
         </div>
-        <div className="space-y-4">
-          <div>
-            <p className="text-xs font-semibold mb-2" style={{ color: theme.text }}>{t('theme')}</p>
-            <div className="grid grid-cols-2 gap-2">
-              {Object.entries(themes).map(([key, t2]) => (
+
+        {/* Language */}
+        <div className="flex items-center justify-between gap-4 px-4 py-3.5">
+          <p className="text-[13px] font-semibold" style={{ color: theme.text }}>{t('language')}</p>
+          <div
+            className="inline-flex p-0.5 rounded-[9px] border"
+            style={{ backgroundColor: theme.inputBg, borderColor: theme.inputBorder }}
+            role="group"
+            aria-label={t('language')}
+          >
+            {languages.map(lang => {
+              const selected = settings.language === lang.id
+              return (
                 <button
-                  key={key}
-                  onClick={() => onPatch({ theme: key as ThemeName })}
-                  className={`flex items-center gap-2.5 px-4 py-3 rounded-xl text-xs font-semibold transition-all duration-200 ${
-                    settings.theme === key ? 'ring-2 ring-primary-500 scale-105' : 'hover:bg-white/50 dark:hover:bg-white/5'
-                  }`}
+                  key={lang.id}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => onPatch({ language: lang.id })}
+                  className="px-3.5 py-1.5 rounded-[7px] text-[11px] font-semibold transition-[background-color,color] duration-base ease-out-quart"
                   style={{
-                    backgroundColor: settings.theme === key ? t2.card : t2.background,
-                    color: t2.text,
-                    border: `1px solid ${t2.border}`,
+                    backgroundColor: selected ? theme.card : 'transparent',
+                    color: selected ? theme.text : theme.textMuted,
+                    boxShadow: selected ? `0 1px 2px ${theme.hairline}` : undefined,
                   }}
                 >
-                  <div className="w-4 h-4 rounded-full shadow-soft" style={{ backgroundColor: t2.primary }} />
-                  {settings.language === 'zh' ? t2.name : t2.nameEn}
+                  {lang.label}
                 </button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <p className="text-xs font-semibold mb-2" style={{ color: theme.text }}>{t('language')}</p>
-            <div className="flex gap-2">
-              {(['zh', 'en'] as const).map(lang => (
-                <button
-                  key={lang}
-                  onClick={() => onPatch({ language: lang })}
-                  className={`flex-1 px-4 py-3 rounded-xl text-xs font-semibold transition-all duration-200 ${
-                    settings.language === lang
-                      ? 'bg-primary-600 text-white ring-2 ring-primary-300'
-                      : 'bg-white dark:bg-slate-800 hover:bg-primary-50 dark:hover:bg-primary-50'
-                  }`}
-                >
-                  {lang === 'zh' ? '中文' : 'English'}
-                </button>
-              ))}
-            </div>
+              )
+            })}
           </div>
         </div>
       </div>

@@ -88,17 +88,30 @@ export interface ThemeConfig {
   name: string
   nameEn: string
   primary: string
+  /** Text/icon colour that sits on top of `primary`. */
+  onPrimary: string
   background: string
   card: string
   text: string
   textSecondary: string
   textMuted: string
   border: string
+  /** Low-contrast separator for inner lists / group boundaries. */
+  hairline: string
   accent: string
+  success: string
+  danger: string
   surface: string
+  /** Slightly raised surface for nested panels. */
+  elevated: string
   inputBg: string
   inputBorder: string
   inputFocus: string
+  /** Translucent surface for floating layers (result card, overlay toolbar). */
+  glassBg: string
+  glassBorder: string
+  /** Backdrop colour behind the capture selection. */
+  overlay: string
 }
 
 export interface TestConfig {

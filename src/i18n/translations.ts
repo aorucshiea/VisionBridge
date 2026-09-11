@@ -65,6 +65,15 @@ export interface TranslationDict {
   pipelineA: string
   pipelineB: string
   pipelineC: string
+  pipelineDescVlm: string
+  pipelineDescOcr: string
+  pipelineDescVlmLlm: string
+  statusPipeline: string
+  statusModel: string
+  hotkeyLabel: string
+  captureFrameHint: string
+  copied: string
+  copyFailed: string
   ollamaLocal: string
   openaiGpt4: string
   anthropicClaude: string
@@ -176,6 +185,15 @@ export const translations: Record<'zh' | 'en', TranslationDict> = {
     pipelineA: '管道 A',
     pipelineB: '管道 B',
     pipelineC: '管道 C',
+    pipelineDescVlm: '一步直达：截图直接交给视觉模型',
+    pipelineDescOcr: '先精准识别文字，再交给语言模型',
+    pipelineDescVlmLlm: '先转成结构描述，再自由提问',
+    statusPipeline: '管道',
+    statusModel: '模型',
+    hotkeyLabel: '快捷键',
+    captureFrameHint: '拖动框选要理解的区域',
+    copied: '已复制',
+    copyFailed: '复制失败',
     ollamaLocal: 'Ollama (本地)',
     openaiGpt4: 'OpenAI (GPT-4o)',
     anthropicClaude: 'Anthropic (Claude 3.5)',
@@ -285,6 +303,15 @@ export const translations: Record<'zh' | 'en', TranslationDict> = {
     pipelineA: 'Pipeline A',
     pipelineB: 'Pipeline B',
     pipelineC: 'Pipeline C',
+    pipelineDescVlm: 'One step — the image goes straight to a vision model',
+    pipelineDescOcr: 'Read the text precisely first, then hand it to a language model',
+    pipelineDescVlmLlm: 'Turn the image into a structured description, then ask anything',
+    statusPipeline: 'Pipeline',
+    statusModel: 'Model',
+    hotkeyLabel: 'Shortcut',
+    captureFrameHint: 'Drag to frame the area you want to understand',
+    copied: 'Copied',
+    copyFailed: 'Copy failed',
     ollamaLocal: 'Ollama (Local)',
     openaiGpt4: 'OpenAI (GPT-4o)',
     anthropicClaude: 'Anthropic (Claude 3.5)',

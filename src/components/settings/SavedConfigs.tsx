@@ -1,6 +1,7 @@
 import React from 'react'
-import { Save, X as CloseIcon } from 'lucide-react'
+import { Check, X as CloseIcon } from 'lucide-react'
 import type { SavedConfiguration, ThemeConfig } from '../../types'
+import { tint } from '../../theme/themes'
 import { Card, TextInput, type TFunc } from './ui'
 
 const API_FORMAT_TAGS = ['OpenAI API', 'Anthropic API', 'Ollama API', 'Gemini API']
@@ -35,6 +36,42 @@ interface SavedConfigsProps {
   t: TFunc
 }
 
+/** Selectable tag chip. `tone` picks the highlight colour. */
+function TagChip({ label, selected, onClick, theme, tone }: {
+  label: string
+  selected: boolean
+  onClick: () => void
+  theme: ThemeConfig
+  tone: 'primary' | 'accent'
+}) {
+  const color = tone === 'accent' ? theme.accent : theme.primary
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      onClick={onClick}
+      className="px-2.5 py-1 rounded-full border text-[11px] font-medium transition-[background-color,border-color,color,transform] duration-fast ease-out-quart active:scale-[0.97]"
+      style={selected
+        ? { backgroundColor: tint(color, theme.card, 0.16), borderColor: tint(color, theme.card, 0.34), color }
+        : { backgroundColor: 'transparent', borderColor: theme.inputBorder, color: theme.textSecondary }}
+    >
+      {label}
+    </button>
+  )
+}
+
+/** Read-only label chip (tags / providers on a saved entry). */
+function MetaChip({ label, color, theme }: { label: string; color: string; theme: ThemeConfig }) {
+  return (
+    <span
+      className="px-1.5 py-0.5 rounded text-[10px] font-medium"
+      style={{ backgroundColor: tint(color, theme.card, 0.14), color }}
+    >
+      {label}
+    </span>
+  )
+}
+
 const SavedConfigs: React.FC<SavedConfigsProps> = (props) => {
   const {
     show, onToggleShow, configName, onConfigNameChange, configTags, customTagInput,
@@ -49,99 +86,135 @@ const SavedConfigs: React.FC<SavedConfigsProps> = (props) => {
     else onAddTag(tag)
   }
 
+  const pipelineLabel = (pipeline: string) =>
+    pipeline === 'VLM' ? t('pipelineA') : pipeline === 'OCR+LLM' ? t('pipelineB') : t('pipelineC')
+
+  /** Provider chips for one entry — declarative instead of one branch per pipeline. */
+  const providerBadges = (config: SavedConfiguration) => {
+    const c = config.config
+    const entries: Array<{ label: string; color: string }> = []
+    if (config.pipeline === 'VLM' && c.vlmProvider) {
+      entries.push({ label: getApiFormatLabel(c.vlmProvider), color: theme.primary })
+    }
+    if (config.pipeline === 'OCR+LLM') {
+      if (c.ocrProvider) entries.push({ label: getApiFormatLabel(c.ocrProvider), color: theme.primary })
+      if (c.llmProvider) entries.push({ label: getApiFormatLabel(c.llmProvider), color: theme.accent })
+    }
+    if (config.pipeline === 'VLM+LLM') {
+      if (c.vlm2Provider) entries.push({ label: getApiFormatLabel(c.vlm2Provider), color: theme.primary })
+      if (c.llm2Provider) entries.push({ label: getApiFormatLabel(c.llm2Provider), color: theme.accent })
+    }
+    return entries
+  }
+
   return (
-    <section className="space-y-3">
-      <div className="flex items-center justify-between px-1">
-        <div className="flex items-center gap-2">
-          <Save size={14} style={{ color: theme.primary }} />
-          <h2 className="text-xs font-heading font-bold uppercase tracking-wider" style={{ color: theme.textSecondary }}>
-            {t('savedConfigs')}
-          </h2>
-        </div>
+    <section className="space-y-2.5">
+      <div className="flex items-baseline justify-between">
+        <h2 className="eyebrow" style={{ color: theme.textSecondary }}>{t('savedConfigs')}</h2>
         <button
+          type="button"
           onClick={onToggleShow}
-          className="text-xs font-semibold text-primary-600 hover:text-primary-700 transition-colors"
+          aria-expanded={show}
+          className="flex items-center gap-1.5 text-[11px] font-semibold transition-colors duration-fast ease-out-quart"
+          style={{ color: theme.primary }}
         >
           {show ? t('hide') : t('show')}
+          {configurations.length > 0 && (
+            <span
+              className="px-1.5 rounded-full text-[10px] tabular-nums"
+              style={{ backgroundColor: tint(theme.primary, theme.card, 0.16), color: theme.primary }}
+            >
+              {configurations.length}
+            </span>
+          )}
         </button>
       </div>
 
       {show && (
-        <div className="space-y-3 animate-fade-in">
-          <Card theme={theme} className="space-y-3">
+        <div className="space-y-3 animate-rise">
+          <Card theme={theme} className="space-y-4">
             <TextInput
               type="text"
               value={configName}
               onChange={(e) => onConfigNameChange(e.target.value)}
               placeholder={t('placeholderConfigName')}
+              aria-label={t('configName')}
               theme={theme}
             />
 
             <div className="space-y-3">
               <div className="space-y-2">
-                <p className="text-xs font-semibold" style={{ color: theme.textSecondary }}>{t('apiFormatTags')}</p>
-                <div className="flex flex-wrap gap-2">
+                <p className="eyebrow" style={{ color: theme.textMuted }}>{t('apiFormatTags')}</p>
+                <div className="flex flex-wrap gap-1.5">
                   {API_FORMAT_TAGS.map(tag => (
-                    <button
+                    <TagChip
                       key={tag}
+                      label={tag}
+                      selected={configTags.includes(tag)}
                       onClick={() => toggleTag(tag)}
-                      className={`text-xs px-3 py-1.5 rounded-lg border transition-all duration-200 ${
-                        configTags.includes(tag)
-                          ? 'bg-primary-600 text-white border-primary-600'
-                          : 'bg-white dark:bg-slate-800 text-slate-600 border-slate-200 hover:border-primary-300'
-                      }`}
-                    >
-                      {tag}
-                    </button>
+                      theme={theme}
+                      tone="primary"
+                    />
                   ))}
                 </div>
               </div>
 
               <div className="space-y-2">
-                <p className="text-xs font-semibold" style={{ color: theme.textSecondary }}>{t('modelTypeTags')}</p>
-                <div className="flex flex-wrap gap-2">
+                <p className="eyebrow" style={{ color: theme.textMuted }}>{t('modelTypeTags')}</p>
+                <div className="flex flex-wrap gap-1.5">
                   {MODEL_TYPE_TAGS.map(tag => (
-                    <button
+                    <TagChip
                       key={tag}
+                      label={tag}
+                      selected={configTags.includes(tag)}
                       onClick={() => toggleTag(tag)}
-                      className={`text-xs px-3 py-1.5 rounded-lg border transition-all duration-200 ${
-                        configTags.includes(tag)
-                          ? 'bg-success-600 text-white border-success-600'
-                          : 'bg-white dark:bg-slate-800 text-slate-600 border-slate-200 hover:border-success-300'
-                      }`}
-                    >
-                      {tag}
-                    </button>
+                      theme={theme}
+                      tone="accent"
+                    />
                   ))}
                 </div>
               </div>
 
               <div className="space-y-2">
-                <p className="text-xs font-semibold" style={{ color: theme.textSecondary }}>{t('customTags')}</p>
+                <p className="eyebrow" style={{ color: theme.textMuted }}>{t('customTags')}</p>
                 <div className="flex gap-2">
                   <TextInput
                     type="text"
                     value={customTagInput}
                     onChange={(e) => onCustomTagInputChange(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && onAddCustomTag()}
+                    onKeyDown={(e) => { if (e.key === 'Enter') onAddCustomTag() }}
                     placeholder={t('placeholderCustomTag')}
+                    aria-label={t('customTags')}
                     className="flex-1"
                     theme={theme}
                   />
                   <button
+                    type="button"
                     onClick={onAddCustomTag}
-                    className="h-10 px-4 rounded-lg text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all duration-200"
+                    className="h-10 px-4 rounded-field border text-[11px] font-semibold transition-[background-color,transform] duration-fast ease-out-quart active:scale-[0.97]"
+                    style={{ backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.textSecondary }}
                   >
                     {t('add')}
                   </button>
                 </div>
                 {customTags.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-1.5 pt-0.5">
                     {customTags.map(tag => (
-                      <span key={tag} className="text-xs px-3 py-1.5 bg-blue-100 text-blue-600 rounded-lg flex items-center gap-1.5 transition-all duration-200">
+                      <span
+                        key={tag}
+                        className="flex items-center gap-1 pl-2.5 pr-1 py-1 rounded-full border text-[11px]"
+                        style={{ borderColor: theme.inputBorder, color: theme.textSecondary }}
+                      >
                         {tag}
-                        <button onClick={() => onRemoveTag(tag)} className="hover:text-blue-800 transition-colors">
-                          <CloseIcon size={12} />
+                        <button
+                          type="button"
+                          onClick={() => onRemoveTag(tag)}
+                          aria-label={`${t('delete')} ${tag}`}
+                          className="w-4 h-4 flex items-center justify-center rounded-full transition-colors duration-fast"
+                          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = tint(theme.danger, theme.card, 0.16); e.currentTarget.style.color = theme.danger }}
+                          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = 'inherit' }}
+                        >
+                          <CloseIcon size={11} />
                         </button>
                       </span>
                     ))}
@@ -151,10 +224,13 @@ const SavedConfigs: React.FC<SavedConfigsProps> = (props) => {
             </div>
 
             <button
+              type="button"
               onClick={onSave}
               disabled={!configName.trim()}
-              className="w-full h-10 px-4 rounded-lg text-xs font-semibold bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+              className="w-full h-10 rounded-field text-[12px] font-semibold flex items-center justify-center gap-1.5 transition-[filter,transform] duration-fast ease-out-quart hover:brightness-[1.06] active:scale-[0.99] disabled:opacity-45 disabled:cursor-not-allowed disabled:hover:brightness-100"
+              style={{ backgroundColor: theme.primary, color: theme.onPrimary }}
             >
+              <Check size={14} />
               {t('saveConfig')}
             </button>
           </Card>
@@ -166,96 +242,66 @@ const SavedConfigs: React.FC<SavedConfigsProps> = (props) => {
                 if (pipelineConfigs.length === 0) return null
 
                 return (
-                  <div key={pipeline} className="rounded-xl p-4 shadow-soft transition-all duration-200" style={{ backgroundColor: theme.card }}>
-                    <p className="text-xs font-heading font-bold text-primary-600 bg-primary-50 px-2.5 py-1 rounded-lg inline-flex mb-3">
-                      {pipeline === 'VLM' ? t('pipelineA') : pipeline === 'OCR+LLM' ? t('pipelineB') : t('pipelineC')}
-                    </p>
-                    <div className="space-y-2">
-                      {pipelineConfigs.map(config => (
-                        <div
-                          key={config.id}
-                          className="flex items-center justify-between p-3 rounded-lg transition-all duration-200 hover:bg-black/5 dark:hover:bg-white/5"
-                          style={{ backgroundColor: theme.inputBg }}
-                        >
-                          <div className="flex-1">
-                            <p className="text-sm font-semibold mb-1" style={{ color: theme.text }}>{config.name}</p>
-                            {config.tags && config.tags.length > 0 && (
-                              <div className="flex flex-wrap gap-1.5">
-                                {config.tags.map(tag => (
-                                  <span
-                                    key={tag}
-                                    className={`text-[10px] px-2 py-0.5 rounded-md ${
-                                      API_FORMAT_TAGS.includes(tag)
-                                        ? 'bg-purple-100 text-purple-600'
-                                        : MODEL_TYPE_TAGS.includes(tag)
-                                          ? 'bg-green-100 text-green-600'
-                                          : 'bg-blue-100 text-blue-600'
-                                    }`}
-                                  >
-                                    {tag}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                            <div className="flex gap-1.5 mt-1">
-                              {config.pipeline === 'VLM' && config.config.vlmProvider && (
-                                <span className="text-[10px] px-2 py-0.5 bg-purple-100 text-purple-600 rounded-md">
-                                  {getApiFormatLabel(config.config.vlmProvider)}
-                                </span>
-                              )}
-                              {config.pipeline === 'OCR+LLM' && (
-                                <>
-                                  {config.config.ocrProvider && (
-                                    <span className="text-[10px] px-2 py-0.5 bg-green-100 text-green-600 rounded-md">
-                                      {getApiFormatLabel(config.config.ocrProvider)}
-                                    </span>
-                                  )}
-                                  {config.config.llmProvider && (
-                                    <span className="text-[10px] px-2 py-0.5 bg-orange-100 text-orange-600 rounded-md">
-                                      {getApiFormatLabel(config.config.llmProvider)}
-                                    </span>
-                                  )}
-                                </>
-                              )}
-                              {config.pipeline === 'VLM+LLM' && (
-                                <>
-                                  {config.config.vlm2Provider && (
-                                    <span className="text-[10px] px-2 py-0.5 bg-purple-100 text-purple-600 rounded-md">
-                                      {getApiFormatLabel(config.config.vlm2Provider)}
-                                    </span>
-                                  )}
-                                  {config.config.llm2Provider && (
-                                    <span className="text-[10px] px-2 py-0.5 bg-pink-100 text-pink-600 rounded-md">
-                                      {getApiFormatLabel(config.config.llm2Provider)}
-                                    </span>
-                                  )}
-                                </>
+                  <div key={pipeline} className="rounded-card border overflow-hidden" style={{ backgroundColor: theme.card, borderColor: theme.hairline }}>
+                    <div className="flex items-center gap-2 px-4 py-2.5 border-b" style={{ borderColor: theme.hairline }}>
+                      <span className="eyebrow" style={{ color: theme.textMuted }}>{pipelineLabel(pipeline)}</span>
+                      <span className="font-mono text-[10px]" style={{ color: theme.textMuted }}>{pipeline}</span>
+                    </div>
+                    <div className="divide-y" style={{ borderColor: theme.hairline }}>
+                      {pipelineConfigs.map(config => {
+                        const badges = providerBadges(config)
+                        return (
+                          <div key={config.id} className="flex items-center gap-3 px-4 py-3">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[12.5px] font-semibold truncate" style={{ color: theme.text }}>{config.name}</p>
+                              {(badges.length > 0 || (config.tags && config.tags.length > 0)) && (
+                                <div className="flex flex-wrap gap-1 mt-1.5">
+                                  {badges.map(b => <MetaChip key={b.label} label={b.label} color={b.color} theme={theme} />)}
+                                  {config.tags?.map(tag => (
+                                    <MetaChip
+                                      key={tag}
+                                      label={tag}
+                                      color={API_FORMAT_TAGS.includes(tag) ? theme.primary : MODEL_TYPE_TAGS.includes(tag) ? theme.accent : theme.textMuted}
+                                      theme={theme}
+                                    />
+                                  ))}
+                                </div>
                               )}
                             </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => onApply(config)}
+                                className="h-7 px-2.5 rounded-[7px] text-[11px] font-semibold border transition-[background-color,transform] duration-fast ease-out-quart active:scale-[0.96]"
+                                style={{
+                                  backgroundColor: tint(theme.primary, theme.card, 0.14),
+                                  borderColor: tint(theme.primary, theme.card, 0.3),
+                                  color: theme.primary,
+                                }}
+                              >
+                                {t('apply')}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => onDelete(config.id)}
+                                className="h-7 px-2.5 rounded-[7px] text-[11px] font-semibold border transition-[background-color,color,transform] duration-fast ease-out-quart active:scale-[0.96]"
+                                style={{ backgroundColor: 'transparent', borderColor: theme.hairline, color: theme.textMuted }}
+                                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = tint(theme.danger, theme.card, 0.14); e.currentTarget.style.color = theme.danger; e.currentTarget.style.borderColor = tint(theme.danger, theme.card, 0.3) }}
+                                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = theme.textMuted; e.currentTarget.style.borderColor = theme.hairline }}
+                              >
+                                {t('delete')}
+                              </button>
+                            </div>
                           </div>
-                          <div className="flex gap-1.5">
-                            <button
-                              onClick={() => onApply(config)}
-                              className="h-8 px-3 rounded-lg text-xs font-semibold bg-primary-600 text-white hover:bg-primary-700 transition-all duration-200"
-                            >
-                              {t('apply')}
-                            </button>
-                            <button
-                              onClick={() => onDelete(config.id)}
-                              className="h-8 px-3 rounded-lg text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all duration-200"
-                            >
-                              {t('delete')}
-                            </button>
-                          </div>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   </div>
                 )
               })}
             </div>
           ) : (
-            <p className="text-xs text-center py-6" style={{ color: theme.textMuted }}>{t('noConfigs')}</p>
+            <p className="text-[11px] text-center py-6" style={{ color: theme.textMuted }}>{t('noConfigs')}</p>
           )}
         </div>
       )}

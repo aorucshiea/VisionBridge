@@ -1,0 +1,6 @@
+{
+  "name": "visionbridge-shots",
+  "private": true,
+  "description": "Visual QA harness entry — run with: electron scripts <prefix>",
+  "main": "shoot.js"
+}

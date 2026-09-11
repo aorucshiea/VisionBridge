@@ -1,13 +1,51 @@
-import React, { useEffect, useState, useRef } from 'react'
-import { X, Copy, Move, Send, Minus, Save, Check, ImageIcon, ChevronDown, ChevronUp } from 'lucide-react'
+import React, { useEffect, useRef, useState } from 'react'
+import { ArrowUp, Check, Copy, Image as ImageIcon, MessageSquare, X } from 'lucide-react'
 import { useTranslation } from '../hooks/useTranslation'
 import { captureRegion } from '../lib/screenshot'
-import { themes } from '../theme/themes'
+import { themes, tint } from '../theme/themes'
 import type { ThemeConfig } from '../types'
 
 interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
+}
+
+/** The app mark, repeated so the floating card is identifiable at a glance. */
+function Mark({ color }: { color: string }) {
+  return (
+    <svg width={16} height={16} viewBox="0 0 28 28" fill="none" aria-hidden="true">
+      <rect x="1.5" y="1.5" width="25" height="25" rx="7.5" fill={color} fillOpacity="0.16" />
+      <g stroke={color} strokeWidth="2.4" strokeLinecap="round">
+        <path d="M7.6 11.2V9.3a1.7 1.7 0 0 1 1.7-1.7h1.9" />
+        <path d="M16.8 7.6h1.9a1.7 1.7 0 0 1 1.7 1.7v1.9" />
+        <path d="M20.4 16.8v1.9a1.7 1.7 0 0 1-1.7 1.7h-1.9" />
+        <path d="M11.2 20.4H9.3a1.7 1.7 0 0 1-1.7-1.7v-1.9" />
+      </g>
+      <rect x="10.2" y="13.05" width="7.6" height="1.9" rx="0.95" fill={color} />
+    </svg>
+  )
+}
+
+/** Icon button used in the card's title bar. */
+function BarButton({ onClick, label, tintColor, children }: {
+  onClick: () => void
+  label: string
+  tintColor: string
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className="w-7 h-7 flex items-center justify-center rounded-lg transition-[background-color,color,transform] duration-fast ease-out-quart active:scale-[0.94] no-drag"
+      onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = tintColor }}
+      onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent' }}
+    >
+      {children}
+    </button>
+  )
 }
 
 const ResultView: React.FC = () => {
@@ -20,17 +58,25 @@ const ResultView: React.FC = () => {
   const [inputText, setInputText] = useState<string>('')
   const [isSending, setIsSending] = useState<boolean>(false)
   const [saveAsHistory, setSaveAsHistory] = useState<boolean>(false)
-  const [isExpanded, setIsExpanded] = useState(false)
+  const [copied, setCopied] = useState<boolean>(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const copyTimer = useRef<number | null>(null)
 
   useEffect(() => {
-    window.ipcRenderer.getSettings().then((settings) => {
-      if (settings?.theme) setTheme(themes[settings.theme as keyof typeof themes] || themes.light)
+    const ipc = window.ipcRenderer
+    if (!ipc) return
+    ipc.getSettings().then((settings: any) => {
+      // Keep the theme for the boot frame, then prefer the live value.
+      setTheme(themes[(settings?.theme as keyof typeof themes) || 'light'] || themes.light)
     }).catch(() => {})
   }, [])
 
+  useEffect(() => () => { if (copyTimer.current) window.clearTimeout(copyTimer.current) }, [])
+
   useEffect(() => {
-    return window.ipcRenderer.onDisplayContent((data) => {
+    const ipc = window.ipcRenderer
+    if (!ipc) { setIsProcessing(false); return }
+    return ipc.onDisplayContent((data) => {
       setContent(data)
       setIsProcessing(false)
       setIsChatMode(false)
@@ -46,7 +92,9 @@ const ResultView: React.FC = () => {
 
   // Listen for append-screenshot event (chat mode)
   useEffect(() => {
-    return window.ipcRenderer.onAppendScreenshot((data) => {
+    const ipc = window.ipcRenderer
+    if (!ipc) return
+    return ipc.onAppendScreenshot((data) => {
       setIsChatMode(true)
       setIsProcessing(false)
       setMessages(prev => [...prev, { role: 'user', content: `[${t('screenshot')}: ${data.region.width}x${data.region.height}]\n${t('processing')}` }])
@@ -57,12 +105,13 @@ const ResultView: React.FC = () => {
 
   const processScreenshot = async (region: any, mode: any) => {
     try {
+      const ipc = window.ipcRenderer
       const croppedBase64 = await captureRegion(region)
-      const currentSettings = await window.ipcRenderer.getSettings()
+      const currentSettings = await ipc.getSettings()
 
       let result = ''
       if (currentSettings.mode === 'VLM') {
-        result = await window.ipcRenderer.callAI({
+        result = await ipc.callAI({
           provider: currentSettings.vlmProvider,
           apiKey: currentSettings.vlmApiKey,
           baseUrl: currentSettings.vlmBaseUrl,
@@ -72,7 +121,7 @@ const ResultView: React.FC = () => {
           images: [croppedBase64],
         })
       } else if (currentSettings.mode === 'OCR+LLM') {
-        const ocrText = await window.ipcRenderer.callOCR({
+        const ocrText = await ipc.callOCR({
           provider: currentSettings.ocrProvider,
           apiKey: currentSettings.ocrApiKey,
           baseUrl: currentSettings.ocrBaseUrl,
@@ -83,7 +132,7 @@ const ResultView: React.FC = () => {
           throw new Error(t('ocrNoText'))
         }
 
-        result = await window.ipcRenderer.callAI({
+        result = await ipc.callAI({
           provider: currentSettings.llmProvider,
           apiKey: currentSettings.llmApiKey,
           baseUrl: currentSettings.llmBaseUrl,
@@ -92,7 +141,7 @@ const ResultView: React.FC = () => {
           prompt: (mode === 'translate' ? currentSettings.llmTranslatePrompt : currentSettings.llmExplainPrompt) + "\n\n选区文字如下：\n" + ocrText,
         })
       } else if (currentSettings.mode === 'VLM+LLM') {
-        const jsonData = await window.ipcRenderer.callAI({
+        const jsonData = await ipc.callAI({
           provider: currentSettings.vlm2Provider,
           apiKey: currentSettings.vlm2ApiKey,
           baseUrl: currentSettings.vlm2BaseUrl,
@@ -102,7 +151,7 @@ const ResultView: React.FC = () => {
           images: [croppedBase64],
         })
 
-        result = await window.ipcRenderer.callAI({
+        result = await ipc.callAI({
           provider: currentSettings.llm2Provider,
           apiKey: currentSettings.llm2ApiKey,
           baseUrl: currentSettings.llm2BaseUrl,
@@ -143,12 +192,19 @@ const ResultView: React.FC = () => {
     window.ipcRenderer.hideResult()
   }
 
-  const handleCopy = () => {
+  const handleCopy = async () => {
     // In chat mode copy the whole conversation; otherwise the plain result.
     const text = isChatMode
       ? messages.map(m => `${m.role === 'user' ? '>>' : 'AI'}: ${m.content}`).join('\n\n')
       : content
-    navigator.clipboard.writeText(text)
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      if (copyTimer.current) window.clearTimeout(copyTimer.current)
+      copyTimer.current = window.setTimeout(() => setCopied(false), 1800)
+    } catch (error) {
+      console.error('[ResultView] Copy failed:', error)
+    }
   }
 
   const handleSend = async () => {
@@ -184,92 +240,105 @@ const ResultView: React.FC = () => {
     }
   }
 
-  const handleExpandCollapse = () => {
-    setIsExpanded(!isExpanded)
-  }
+  const vars = {
+    '--glass-bg': theme.glassBg,
+    '--glass-border': theme.glassBorder,
+    '--glass-solid': theme.card,
+    '--scroll-thumb': `${theme.textMuted}66`,
+    '--scroll-thumb-hover': `${theme.textMuted}99`,
+    '--focus-ring': theme.primary,
+    '--kbd-bg': tint(theme.text, theme.background, 0.07),
+    '--kbd-border': theme.hairline,
+    '--kbd-fg': theme.textSecondary,
+    '--sweep-color': theme.primary,
+  } as React.CSSProperties
+
+  const hoverBg = tint(theme.text, theme.card, 0.08)
 
   return (
     <div
-      className="w-full h-full border rounded-2xl shadow-2xl flex flex-col overflow-hidden transition-all duration-200"
-      style={{ backgroundColor: theme.card, borderColor: theme.border, color: theme.text }}
+      className="w-full h-full glass rounded-[14px] flex flex-col overflow-hidden animate-pop"
+      style={{
+        ...vars,
+        color: theme.text,
+        boxShadow: '0 1px 0 rgba(255,255,255,0.35) inset, 0 10px 24px -8px rgba(0,0,0,0.28), 0 32px 64px -28px rgba(0,0,0,0.4)',
+      }}
     >
-      {/* Draggable Header */}
-      <div className="h-12 flex items-center justify-between px-4 border-b select-none drag cursor-move" style={{ backgroundColor: theme.background, borderColor: theme.border }}>
-        <div className="flex items-center gap-2">
-          <div className="w-5 h-5 rounded-md flex items-center justify-center" style={{ backgroundColor: theme.primary }}>
-            <Move size={12} className="text-white" />
-          </div>
-          <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: theme.textSecondary }}>
-            {isChatMode ? 'VisionBridge Chat' : 'VisionBridge Result'}
-          </span>
-        </div>
-        <div className="flex gap-1 no-drag">
+      {/* Draggable title bar */}
+      <div
+        className="h-9 shrink-0 flex items-center gap-2 pl-2.5 pr-1.5 select-none drag cursor-move"
+        style={{ borderBottom: `1px solid ${theme.hairline}` }}
+      >
+        <Mark color={theme.primary} />
+        <span className="eyebrow truncate" style={{ color: theme.textSecondary }}>
+          {t('title')}
+        </span>
+
+        <div className="flex-1" />
+
+        <div className="flex items-center gap-0.5 no-drag">
           {isChatMode && (
-            <button
-              onClick={() => setIsChatMode(false)}
-              title={t('exitChat')}
-              className="p-1.5 rounded-lg transition-colors"
-              style={{ color: theme.textSecondary }}
-            >
-              <Minus size={14} />
-            </button>
+            <BarButton onClick={() => setIsChatMode(false)} label={t('exitChat')} tintColor={hoverBg}>
+              <MessageSquare size={13} style={{ color: theme.textSecondary }} />
+            </BarButton>
           )}
-          <button onClick={handleCopy} title={t('copyResult')} className="p-1.5 rounded-lg transition-colors" style={{ color: theme.textSecondary }}>
-            <Copy size={14} />
-          </button>
-          <button onClick={handleClose} title={t('closeResult')} className="p-1.5 rounded-lg transition-colors no-drag hover:text-red-500">
-            <X size={14} />
+          <BarButton onClick={handleCopy} label={copied ? t('copied') : t('copyResult')} tintColor={hoverBg}>
+            {copied
+              ? <Check size={13} style={{ color: theme.success }} />
+              : <Copy size={13} style={{ color: theme.textSecondary }} />}
+          </BarButton>
+          <button
+            type="button"
+            onClick={handleClose}
+            title={t('closeResult')}
+            aria-label={t('closeResult')}
+            className="w-7 h-7 flex items-center justify-center rounded-lg transition-[background-color,color,transform] duration-fast ease-out-quart active:scale-[0.94] no-drag"
+            style={{ color: theme.textSecondary }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = tint(theme.danger, theme.card, 0.14); e.currentTarget.style.color = theme.danger }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = theme.textSecondary }}
+          >
+            <X size={13} />
           </button>
         </div>
       </div>
 
-      {/* Content Area */}
+      {/* Body */}
       <div className="flex-1 overflow-auto custom-scrollbar no-drag">
         {isChatMode ? (
-          /* Chat Mode */
           <div className="h-full flex flex-col">
-            <div className="flex-1 p-4 space-y-4">
+            <div className="flex-1 px-3 py-3 space-y-2.5">
               {messages.map((msg, idx) => (
                 <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                   <div
-                    className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm ${
-                      msg.role === 'user'
-                        ? 'text-white'
-                        : 'text-slate-700'
-                    }`}
-                    style={msg.role === 'user' ? { backgroundColor: theme.primary } : { backgroundColor: theme.inputBg }}
+                    className="max-w-[86%] rounded-[11px] px-3 py-2 text-[12.5px] leading-relaxed whitespace-pre-wrap break-words"
+                    style={msg.role === 'user'
+                      ? { backgroundColor: tint(theme.primary, theme.card, 0.14), color: theme.text, border: `1px solid ${tint(theme.primary, theme.card, 0.26)}` }
+                      : { backgroundColor: tint(theme.text, theme.card, 0.05), color: theme.text, border: `1px solid ${theme.hairline}` }}
                   >
-                    <div className="whitespace-pre-wrap leading-relaxed">
-                      {msg.content}
-                    </div>
+                    {msg.content}
                   </div>
                 </div>
               ))}
               {isSending && (
                 <div className="flex justify-start">
-                  <div className="rounded-2xl px-4 py-2.5" style={{ backgroundColor: theme.inputBg }}>
-                    <div className="flex gap-1">
-                      <div className="w-2 h-2 rounded-full animate-bounce" style={{ backgroundColor: theme.textMuted, animationDelay: '0ms' }}></div>
-                      <div className="w-2 h-2 rounded-full animate-bounce" style={{ backgroundColor: theme.textMuted, animationDelay: '150ms' }}></div>
-                      <div className="w-2 h-2 rounded-full animate-bounce" style={{ backgroundColor: theme.textMuted, animationDelay: '300ms' }}></div>
-                    </div>
-                  </div>
+                  <div className="w-24 h-7 rounded-[11px] border sweep-track" style={{ backgroundColor: tint(theme.text, theme.card, 0.05), borderColor: theme.hairline }} />
                 </div>
               )}
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Chat Input */}
-            <div className="p-3 border-t space-y-3" style={{ backgroundColor: theme.background, borderColor: theme.border }}>
-              <div className="flex gap-2">
+            <div className="shrink-0 px-3 py-2.5 space-y-2" style={{ borderTop: `1px solid ${theme.hairline}` }}>
+              <div className="flex items-center gap-1.5">
                 <button
+                  type="button"
                   onClick={handleContinueScreenshot}
                   disabled={isSending}
-                  className="px-3 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  style={{ backgroundColor: theme.inputBg, color: theme.textSecondary }}
                   title={t('continueScreenshot')}
+                  aria-label={t('continueScreenshot')}
+                  className="w-8 h-8 shrink-0 flex items-center justify-center rounded-[9px] border transition-[transform,background-color] duration-fast ease-out-quart active:scale-[0.94] disabled:opacity-50"
+                  style={{ backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.textSecondary }}
                 >
-                  <ImageIcon size={16} />
+                  <ImageIcon size={14} />
                 </button>
                 <input
                   type="text"
@@ -277,61 +346,58 @@ const ResultView: React.FC = () => {
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder={t('inputPlaceholder')}
-                  className="flex-1 px-4 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500/20 disabled:opacity-50 border"
+                  aria-label={t('inputPlaceholder')}
+                  className="flex-1 h-8 px-3 text-[12.5px] rounded-[9px] border outline-none transition-[border-color,box-shadow] duration-fast ease-out-quart disabled:opacity-50"
                   style={{ backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.text }}
+                  onFocus={(e) => { e.currentTarget.style.borderColor = theme.inputFocus; e.currentTarget.style.boxShadow = `0 0 0 3px ${theme.primary}22` }}
+                  onBlur={(e) => { e.currentTarget.style.borderColor = theme.inputBorder; e.currentTarget.style.boxShadow = 'none' }}
                   disabled={isSending}
                 />
                 <button
+                  type="button"
                   onClick={handleSend}
                   disabled={isSending || !inputText.trim()}
-                  className="px-4 py-2 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  style={{ backgroundColor: theme.primary }}
+                  aria-label={t('inputPlaceholder')}
+                  className="w-8 h-8 shrink-0 flex items-center justify-center rounded-[9px] transition-[transform,filter] duration-fast ease-out-quart hover:brightness-110 active:scale-[0.94] disabled:opacity-40"
+                  style={{ backgroundColor: theme.primary, color: theme.onPrimary }}
                 >
-                  <Send size={16} />
+                  <ArrowUp size={15} />
                 </button>
               </div>
-              <div className="flex items-center justify-between text-xs" style={{ color: theme.textSecondary }}>
+
+              <div className="flex items-center justify-between">
                 <button
+                  type="button"
                   onClick={() => setSaveAsHistory(!saveAsHistory)}
-                  className={`flex items-center gap-1.5 px-2 py-1 rounded-lg transition-colors ${saveAsHistory ? 'bg-success-100 text-success-600' : 'hover:bg-slate-100'}`}
+                  aria-pressed={saveAsHistory}
+                  className="flex items-center gap-1.5 h-6 px-2 rounded-md text-[11px] font-medium border transition-colors duration-fast ease-out-quart"
+                  style={saveAsHistory
+                    ? { backgroundColor: tint(theme.success, theme.card, 0.14), borderColor: tint(theme.success, theme.card, 0.3), color: theme.success }
+                    : { backgroundColor: 'transparent', borderColor: 'transparent', color: theme.textSecondary }}
                 >
-                  {saveAsHistory ? <Check size={12} /> : <Save size={12} />}
+                  {saveAsHistory ? <Check size={11} /> : null}
                   {saveAsHistory ? t('saveChat') : t('saveAsHistory')}
                 </button>
-                <span>{t('messageCount').replace('{n}', String(messages.length))}</span>
+                <span className="text-[11px]" style={{ color: theme.textMuted }}>
+                  {t('messageCount').replace('{n}', String(messages.length))}
+                </span>
               </div>
             </div>
           </div>
+        ) : isProcessing ? (
+          <div className="h-full flex flex-col justify-center gap-3 px-4">
+            <div className="h-1.5 rounded-full sweep-track" style={{ backgroundColor: tint(theme.text, theme.card, 0.07) }} />
+            <p className="text-[11.5px] text-center" style={{ color: theme.textMuted }}>{t('analyzing')}</p>
+          </div>
         ) : (
-          /* Result Mode */
-          <div className="p-4" style={{ backgroundColor: theme.card }}>
-            {isProcessing ? (
-              <div className="flex flex-col items-center justify-center h-full gap-3">
-                <div className="relative">
-                  <div className="w-8 h-8 border-4 rounded-full animate-spin" style={{ borderColor: theme.border, borderTopColor: theme.primary }}></div>
-                </div>
-                <span className="text-xs font-medium animate-pulse" style={{ color: theme.textMuted }}>{t('analyzing')}</span>
-              </div>
-            ) : (
-              <div className="text-sm leading-relaxed whitespace-pre-wrap selection:bg-blue-100" style={{ color: theme.text }}>
-                {content}
-              </div>
-            )}
+          <div
+            className="px-3.5 py-3 text-[13px] leading-[1.72] whitespace-pre-wrap break-words selection:bg-primary-200/60"
+            style={{ color: theme.text }}
+          >
+            {content}
           </div>
         )}
       </div>
-
-      {/* Expand/Collapse Button */}
-      {isChatMode && (
-        <button
-          onClick={handleExpandCollapse}
-          className="absolute bottom-3 right-3 p-2 rounded-lg transition-all duration-200"
-          style={{ backgroundColor: theme.card, border: `1px solid ${theme.border}`, color: theme.textSecondary }}
-          title={isExpanded ? t('collapse') : t('expand')}
-        >
-          {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-        </button>
-      )}
     </div>
   )
 }
