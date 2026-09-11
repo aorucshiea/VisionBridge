@@ -574,21 +574,32 @@ async function handleTextSelection(): Promise<void> {
     const settings = getSettings()
     const point = screen.getCursorScreenPoint()
     const working = settings.language === 'en' ? 'Translating...' : '翻译中...'
+    console.log('[TextSelection] Alt+T triggered')
 
     const previous = clipboard.readText()
     clipboard.writeText('')           // clear so a failed copy is detectable
     await simulateCopy()
-    await delay(260)
+    await delay(350)
     const text = clipboard.readText().trim()
     clipboard.writeText(previous)     // always restore the user's clipboard
-    if (!text) return                 // nothing selected — stay quiet
+    console.log('[TextSelection] captured text length =', text.length)
+    if (!text) {
+      // Say something — silence here looks exactly like "the feature is broken".
+      await showResultWindow(
+        point.x + 12, point.y + 12,
+        settings.language === 'en'
+          ? 'No selected text detected. Select text first, then press Alt+T.'
+          : '未检测到选中的文字。请先选中文字，再按 Alt+T。')
+      return
+    }
 
     await showResultWindow(point.x + 12, point.y + 12, working)
     const runner = resolveTextRunner(settings)
     const result = await callAI(runner.config, { prompt: runner.promptFor('translate', text) })
     await showResultWindow(point.x + 12, point.y + 12, result)
+    console.log('[TextSelection] done, result length =', result.length)
   } catch (error: any) {
-    console.error('[Main] Text selection failed:', error)
+    console.error('[TextSelection] failed:', error?.message || error)
     const point = screen.getCursorScreenPoint()
     await showResultWindow(point.x + 12, point.y + 12, `Error: ${error?.message || error}`).catch(() => {})
   }
@@ -596,15 +607,20 @@ async function handleTextSelection(): Promise<void> {
 
 function updateTextSelectionShortcut(settings: { enableTextSelection: boolean }): void {
   if (settings.enableTextSelection && !textSelectionRegistered) {
-    const ok = globalShortcut.register(TEXT_SELECTION_ACCELERATOR, () => { void handleTextSelection() })
+    const ok = globalShortcut.register(TEXT_SELECTION_ACCELERATOR, () => {
+      console.log('[TextSelection] Alt+T hotkey fired')
+      void handleTextSelection()
+    })
     if (ok) {
       textSelectionRegistered = true
+      console.log('[TextSelection] Alt+T registered')
     } else {
-      console.warn(`[Main] Failed to register ${TEXT_SELECTION_ACCELERATOR}; the shortcut may be taken by another app.`)
+      console.warn(`[TextSelection] Failed to register Alt+T; the shortcut may be taken by another app.`)
     }
   } else if (!settings.enableTextSelection && textSelectionRegistered) {
     globalShortcut.unregister(TEXT_SELECTION_ACCELERATOR)
     textSelectionRegistered = false
+    console.log('[TextSelection] Alt+T unregistered')
   }
 }
 

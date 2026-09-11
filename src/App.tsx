@@ -117,6 +117,7 @@ function App() {
   /** Transient inline notice — replaces the native alert() dialogs. */
   const [notice, setNotice] = useState<{ text: string; tone: 'info' | 'error' } | null>(null)
   const isProcessingRef = useRef(false)
+  const settingsLoadedRef = useRef(false)
   const processScreenshotRef = useRef<(region: { x: number; y: number; width: number; height: number }, mode: 'translate' | 'explain') => void>()
   const noticeTimer = useRef<number | null>(null)
 
@@ -133,6 +134,20 @@ function App() {
 
   useEffect(() => () => { if (noticeTimer.current) window.clearTimeout(noticeTimer.current) }, [])
 
+  // Toggling 划词翻译 must take effect immediately — the shortcut is re-armed
+  // in the main process on save, so persist the change without waiting for
+  // the save button.
+  useEffect(() => {
+    if (!settingsLoadedRef.current || windowType !== 'main') return
+    window.ipcRenderer.saveSettings(settings).then((res) => {
+      if (res?.success) {
+        setSaveStatus('saved')
+        setTimeout(() => setSaveStatus('idle'), 1500)
+      }
+    }).catch(() => { /* transient — the save button still works */ })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings.enableTextSelection, windowType])
+
   useEffect(() => {
     if (windowType !== 'main') {
       document.body.style.background = 'transparent'
@@ -142,6 +157,7 @@ function App() {
     if (window.ipcRenderer) {
       window.ipcRenderer.getSettings().then((res) => {
         if (res) setSettings(prev => ({ ...prev, ...res }))
+        settingsLoadedRef.current = true
       }).catch((err) => {
         console.error('Failed to load settings:', err)
       })
