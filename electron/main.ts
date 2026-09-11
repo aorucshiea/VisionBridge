@@ -811,6 +811,65 @@ function updateSelectionHook(settings: { enableTextSelection: boolean; selection
 }
 
 // ---------------------------------------------------------------------------
+// Model capability catalog (models.dev — the same source opencode uses).
+// Cached in userData for 24h; entries expose vision/reasoning/tools/context.
+// ---------------------------------------------------------------------------
+let catalogCache: { at: number; data: any } | null = null
+const CATALOG_TTL = 24 * 3600 * 1000
+const CATALOG_PATH = path.join(app.getPath('userData'), 'models-dev-cache.json')
+
+async function loadModelCatalog(): Promise<any> {
+  const now = Date.now()
+  if (catalogCache && now - catalogCache.at < CATALOG_TTL) return catalogCache.data
+  try {
+    if (fs.existsSync(CATALOG_PATH)) {
+      const cached = JSON.parse(fs.readFileSync(CATALOG_PATH, 'utf-8'))
+      if (now - cached.at < CATALOG_TTL) {
+        catalogCache = cached
+        return cached.data
+      }
+    }
+  } catch { /* corrupted cache — refetch */ }
+  // models.dev rejects some local proxies (403), so try direct first and
+  // fall back to the environment proxy path.
+  let resp
+  try {
+    resp = await axios.get('https://models.dev/api.json', { timeout: 30000, proxy: false })
+  } catch {
+    resp = await axios.get('https://models.dev/api.json', { timeout: 30000 })
+  }
+  catalogCache = { at: now, data: resp.data }
+  try { fs.writeFileSync(CATALOG_PATH, JSON.stringify(catalogCache)) } catch { /* best effort */ }
+  return catalogCache.data
+}
+
+ipcMain.handle('model-catalog', async (_event, payload: { mdIds?: string[] }) => {
+  const data = await loadModelCatalog()
+  const ids = (payload?.mdIds || []).filter(Boolean)
+  const seen = new Set<string>()
+  const entries: Array<{ id: string; name: string; vision: boolean; reasoning: boolean; tools: boolean; context: number | null }> = []
+  for (const id of ids) {
+    const provider = data[id]
+    if (!provider?.models) continue
+    for (const m of Object.values(provider.models) as any[]) {
+      if (!m?.id || seen.has(m.id)) continue
+      seen.add(m.id)
+      const vision = m.attachment === true ||
+        (Array.isArray(m.modalities?.input) && m.modalities.input.includes('image'))
+      entries.push({
+        id: m.id,
+        name: m.name || m.id,
+        vision,
+        reasoning: !!m.reasoning,
+        tools: !!m.tool_call,
+        context: m.limit?.context ?? null,
+      })
+    }
+  }
+  return entries
+})
+
+// ---------------------------------------------------------------------------
 // App lifecycle
 // ---------------------------------------------------------------------------
 app.on('window-all-closed', () => {

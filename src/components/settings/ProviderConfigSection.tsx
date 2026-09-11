@@ -1,9 +1,10 @@
 import React, { useId, useState } from 'react'
-import { ChevronDown, Download } from 'lucide-react'
+import { ChevronDown, Download, Radar } from 'lucide-react'
 import type { ThemeConfig, TestStatus } from '../../types'
 import type { TranslationDict } from '../../i18n'
 import { PROVIDER_PRESETS, PROVIDER_GROUPS, GROUP_LABEL_KEY, presetOf } from '../../lib/providers'
 import { tint } from '../../theme/themes'
+import ModelProbe from '../ModelProbe'
 import {
   Card, FieldLabel, MonoInput, PasswordInput, Select, TextArea, TextInput,
   TestButton, TestStatusText, type TFunc,
@@ -69,6 +70,7 @@ const ProviderConfigSection: React.FC<ProviderConfigSectionProps> = (props) => {
   const [fetched, setFetched] = useState<Record<string, string[]>>({})
   const [fetchState, setFetchState] = useState<Record<string, 'idle' | 'loading' | 'error'>>({})
   const [fetchError, setFetchError] = useState('')
+  const [showProbe, setShowProbe] = useState(false)
 
   const preset = presetOf(section.provider)
   const cacheKey = `${section.provider}|${section.baseUrl}`
@@ -169,6 +171,16 @@ const ProviderConfigSection: React.FC<ProviderConfigSectionProps> = (props) => {
           <div className="flex gap-2">
             <div className="flex-[1.4] min-w-0">{modelInput()}</div>
             {fetchButton}
+            <button
+              type="button"
+              onClick={() => setShowProbe(true)}
+              aria-label={t('probeModels')}
+              title={t('probeModels')}
+              className="w-10 h-10 shrink-0 flex items-center justify-center rounded-field border transition-colors duration-150 ease-out-quart active:scale-[0.97]"
+              style={{ backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: toneColor }}
+            >
+              <Radar size={15} />
+            </button>
             {testStyle === 'inline'
               ? <TestButton status={testStatus} onClick={onTest} label={t('test')} theme={theme} />
               : null}
@@ -243,6 +255,18 @@ const ProviderConfigSection: React.FC<ProviderConfigSectionProps> = (props) => {
           <TestButton status={testStatus} onClick={onTest} label={t(testLabelKey)} full theme={theme} />
           <TestStatusText status={testStatus} message={testMessage} />
         </div>
+      )}
+
+      {showProbe && (
+        <ModelProbe
+          config={{ provider: section.provider, apiKey: section.apiKey, baseUrl: section.baseUrl }}
+          mdIds={preset?.mdIds || []}
+          current={section.model}
+          onPick={(m) => { onPatch({ model: m }); setShowProbe(false) }}
+          onClose={() => setShowProbe(false)}
+          theme={theme}
+          t={t}
+        />
       )}
     </div>
   )

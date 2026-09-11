@@ -52,6 +52,7 @@ const api = {
   testConnection: (config: any, type: 'vlm' | 'ocr' | 'llm' | 'vlm2' | 'llm2') =>
     ipcRenderer.invoke('test-connection', config, type),
   listModels: (config: any) => ipcRenderer.invoke('list-models', config),
+  modelCatalog: (payload: { mdIds: string[] }) => ipcRenderer.invoke('model-catalog', payload),
 
   // Chat history
   saveChatHistory: (data: any) => ipcRenderer.invoke('save-chat-history', data),

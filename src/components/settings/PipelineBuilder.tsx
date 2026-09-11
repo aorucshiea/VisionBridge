@@ -1,12 +1,13 @@
 import React, { useState } from 'react'
 import {
-  Plus, Trash2, ArrowUp, ArrowDown, ChevronDown, Check, Layers, Pencil, Puzzle, Download,
+  Plus, Trash2, ArrowUp, ArrowDown, ChevronDown, Check, Layers, Pencil, Puzzle, Download, Radar,
 } from 'lucide-react'
 import type { AppSettings, CustomNodeKind, NodeApi, Pipeline, PipelineNode, ThemeConfig, TestStatus } from '../../types'
 import type { TranslationDict } from '../../i18n'
 import { paletteKinds, kindMeta, customKindLabel, createNode, createPipeline, moveNode } from '../../lib/pipeline'
 import { PROVIDER_PRESETS, PROVIDER_GROUPS, GROUP_LABEL_KEY, presetOf } from '../../lib/providers'
 import { tint } from '../../theme/themes'
+import ModelProbe from '../ModelProbe'
 import {
   Card, FieldLabel, MonoInput, PasswordInput, Select, TextArea, TextInput,
   TestButton, TestStatusText, type TFunc,
@@ -43,6 +44,7 @@ const PipelineBuilder: React.FC<Props> = ({ settings, onPatch, onNotify, theme, 
   const [expandedNode, setExpandedNode] = useState<string | null>(null)
   const [nodeTest, setNodeTest] = useState<Record<string, { status: TestStatus; message: string }>>({})
   const [nodeModels, setNodeModels] = useState<Record<string, string[]>>({})
+  const [probeNode, setProbeNode] = useState<PipelineNode | null>(null)
   const [showApiKey, setShowApiKey] = useState<Record<string, boolean>>({})
   const [newKindOpen, setNewKindOpen] = useState(false)
   const [newKindLabel, setNewKindLabel] = useState('')
@@ -254,6 +256,16 @@ const PipelineBuilder: React.FC<Props> = ({ settings, onPatch, onNotify, theme, 
                       ].map(m => <option key={m} value={m} />)}
                     </datalist>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setProbeNode(node)}
+                    aria-label={t('probeModels')}
+                    title={t('probeModels')}
+                    className="w-8 h-10 shrink-0 flex items-center justify-center rounded-field border transition-colors duration-150 ease-out-quart"
+                    style={{ backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: toneColor }}
+                  >
+                    <Radar size={14} />
+                  </button>
                   <button
                     type="button"
                     onClick={() => void fetchNodeModels(node)}
@@ -562,6 +574,18 @@ const PipelineBuilder: React.FC<Props> = ({ settings, onPatch, onNotify, theme, 
             )
           })}
         </div>
+      )}
+
+      {probeNode && (
+        <ModelProbe
+          config={{ provider: probeNode.provider, apiKey: probeNode.apiKey, baseUrl: probeNode.baseUrl }}
+          mdIds={presetOf(probeNode.provider)?.mdIds || []}
+          current={probeNode.model}
+          onPick={(m) => { patchNode(probeNode.id, { model: m }); setProbeNode(null) }}
+          onClose={() => setProbeNode(null)}
+          theme={theme}
+          t={t}
+        />
       )}
     </section>
   )

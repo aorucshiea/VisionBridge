@@ -59,6 +59,15 @@ export interface TranslationDict {
   providerGroupCn: string
   providerGroupGlobal: string
   providerGroupLocal: string
+  probeModels: string
+  modelProbeTitle: string
+  capVision: string
+  capReasoning: string
+  capTools: string
+  catalogModels: string
+  liveModels: string
+  probeSearch: string
+  probeEmpty: string
   appearance: string
   theme: string
   language: string
@@ -237,6 +246,15 @@ export const translations: Record<'zh' | 'en', TranslationDict> = {
     providerGroupCn: '国内服务',
     providerGroupGlobal: '国际服务',
     providerGroupLocal: '本地与自定义',
+    probeModels: '探测模型能力',
+    modelProbeTitle: '模型能力探测',
+    capVision: '视觉',
+    capReasoning: '推理',
+    capTools: '工具',
+    catalogModels: '能力目录（models.dev）',
+    liveModels: '厂商实时列表',
+    probeSearch: '搜索模型…',
+    probeEmpty: '该厂商暂无目录数据，可用「获取模型」直接拉取',
     appearance: '外观设置',
     theme: '主题',
     language: '语言',
@@ -413,6 +431,15 @@ export const translations: Record<'zh' | 'en', TranslationDict> = {
     providerGroupCn: 'China services',
     providerGroupGlobal: 'Global services',
     providerGroupLocal: 'Local & custom',
+    probeModels: 'Probe model capabilities',
+    modelProbeTitle: 'Model capability probe',
+    capVision: 'vision',
+    capReasoning: 'reasoning',
+    capTools: 'tools',
+    catalogModels: 'Capability catalog (models.dev)',
+    liveModels: 'Live vendor list',
+    probeSearch: 'Search models…',
+    probeEmpty: 'No catalog data for this vendor — use "Fetch models" instead',
     appearance: 'Appearance',
     theme: 'Theme',
     language: 'Language',
