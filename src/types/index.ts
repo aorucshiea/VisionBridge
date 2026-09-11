@@ -90,6 +90,8 @@ export interface AppSettings {
   llm2TranslatePrompt: string
   llm2ExplainPrompt: string
   enableTextSelection: boolean
+  /** How selected text is picked up: automatic on selection, or hotkey only. */
+  selectionTrigger: 'auto' | 'hotkey'
   theme: ThemeName
   language: Language
   trayIconPath: string

@@ -29,18 +29,22 @@
     ],
     "asar": true,
     "asarUnpack": [
-      "public/**/*"
+      "**/node_modules/selection-hook/**"
     ],
     "compression": "maximum",
     "linux": {
       "target": [
         {
           "target": "AppImage",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         },
         {
           "target": "deb",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "public/tray-icon.png",
@@ -50,22 +54,43 @@
     "win": {
       "target": [
         {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
           "target": "portable",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
+      "icon": "public/app-icon.ico",
       "signAndEditExecutable": false,
       "artifactName": "${productName} ${version}.${ext}"
     },
-    "nsis": null,
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Vision Bridge",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "${productName} Setup ${version}.${ext}"
+    },
     "extraMetadata": {
       "main": "dist-electron/main.js"
-    }
+    },
+    "npmRebuild": false
   },
   "dependencies": {
     "lucide-react": "^0.284.0",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "selection-hook": "^2.1.1"
   },
   "devDependencies": {
     "@types/react": "^18.2.15",

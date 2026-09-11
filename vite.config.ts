@@ -12,6 +12,15 @@ export default defineConfig({
     electron([
       {
         entry: 'electron/main.ts',
+        vite: {
+          build: {
+            rollupOptions: {
+              // Native addon — must stay a runtime require so the unpacked
+              // prebuild (asarUnpack) is loaded instead of being bundled.
+              external: ['selection-hook'],
+            },
+          },
+        },
       },
       {
         entry: 'electron/preload.ts',

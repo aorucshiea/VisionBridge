@@ -25,6 +25,7 @@ const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
 let win: BrowserWindow | null = null
 let resultWin: BrowserWindow | null = null
 let maskWin: BrowserWindow | null = null
+let selectionWin: BrowserWindow | null = null
 let tray: Tray | null = null
 let isQuitting = false
 
@@ -648,6 +649,140 @@ function updateCaptureShortcut(settings: { mode: string }): void {
 }
 
 // ---------------------------------------------------------------------------
+// Selection hook (划词自动取词): native UI-Automation listener, same approach
+// as Cherry Studio's selection assistant. When the user selects text in any
+// app, a small toolbar pops up next to the selection.
+// ---------------------------------------------------------------------------
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const SelectionHook: any = (() => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require('selection-hook')
+  } catch (e) {
+    console.warn('[SelectionHook] native module unavailable:', (e as Error).message)
+    return null
+  }
+})()
+
+let selectionHookInstance: any = null
+let lastSelection = { text: '', x: 0, y: 0 }
+let lastSelAt = 0
+
+function createSelectionToolbarWindow(): BrowserWindow {
+  const sWin = new BrowserWindow({
+    width: 236,
+    height: 52,
+    x: 0,
+    y: 0,
+    show: false,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    hasShadow: false,
+    focusable: true,
+    backgroundColor: '#00000000',
+    webPreferences: SECURE_WEB_PREFERENCES,
+  })
+  sWin.setMenu(null)
+  loadWindowUrl(sWin, '?window=selection-toolbar')
+  sWin.on('closed', () => { selectionWin = null })
+  return sWin
+}
+
+/** Clamp a point into the nearest display's work area. */
+function clampToWorkArea(x: number, y: number, width: number, height: number): { x: number; y: number } {
+  const wa = screen.getDisplayNearestPoint({ x: Math.round(x), y: Math.round(y) }).workArea
+  let fx = x
+  let fy = y
+  if (fx + width > wa.x + wa.width) fx = wa.x + wa.width - width - 8
+  if (fx < wa.x) fx = wa.x + 8
+  if (fy + height > wa.y + wa.height) fy = y - height - 10
+  if (fy < wa.y) fy = wa.y + 8
+  return { x: Math.round(fx), y: Math.round(fy) }
+}
+
+function showSelectionToolbar(x: number, y: number, text: string): void {
+  const point = clampToWorkArea(x + 10, y + 12, 236, 52)
+  if (!selectionWin || selectionWin.isDestroyed()) selectionWin = createSelectionToolbarWindow()
+  selectionWin!.setPosition(point.x, point.y)
+  selectionWin!.webContents.send('selection-text', text)
+  selectionWin!.showInactive()
+}
+
+function hideSelectionToolbar(): void {
+  if (selectionWin && !selectionWin.isDestroyed()) selectionWin.hide()
+}
+
+ipcMain.handle('selection-toolbar-action', async (_event, action: 'translate' | 'dismiss') => {
+  if (action === 'dismiss') {
+    hideSelectionToolbar()
+    return { success: true }
+  }
+  const { text, x, y } = lastSelection
+  hideSelectionToolbar()
+  if (!text) return { success: false }
+  try {
+    const settings = getSettings()
+    const working = settings.language === 'en' ? 'Translating...' : '翻译中...'
+    await showResultWindow(x + 12, y + 12, working)
+    const runner = resolveTextRunner(settings)
+    const result = await callAI(runner.config, { prompt: runner.promptFor('translate', text) })
+    await showResultWindow(x + 12, y + 12, result)
+    return { success: true }
+  } catch (error: any) {
+    await showResultWindow(x + 12, y + 12, `Error: ${error?.message || error}`).catch(() => {})
+    return { success: false }
+  }
+})
+
+function updateSelectionHook(settings: { enableTextSelection: boolean; selectionTrigger: string }): void {
+  if (!SelectionHook) return
+  const want = settings.enableTextSelection && settings.selectionTrigger === 'auto'
+  if (want && !selectionHookInstance) {
+    try {
+      selectionHookInstance = new SelectionHook()
+      selectionHookInstance.on('text-selection', (data: any) => {
+        try {
+          const now = Date.now()
+          if (now - lastSelAt < 700) return          // cooldown
+          const text = String(data?.text || '').trim()
+          if (!text || text.length > 5000) return
+          const p = data?.mousePosEnd || data?.endBottom || { x: 0, y: 0 }
+          // ignore selections made inside our own visible windows
+          const inside = BrowserWindow.getAllWindows().some(w => {
+            if (!w.isVisible()) return false
+            const b = w.getBounds()
+            return p.x >= b.x && p.x <= b.x + b.width && p.y >= b.y && p.y <= b.y + b.height
+          })
+          if (inside) return
+          lastSelAt = now
+          const y = data?.endBottom?.y ?? p.y
+          lastSelection = { text, x: p.x, y }
+          console.log('[SelectionHook] selection captured, length =', text.length)
+          showSelectionToolbar(lastSelection.x, lastSelection.y, text)
+        } catch (e) {
+          console.error('[SelectionHook] event error:', (e as Error).message)
+        }
+      })
+      selectionHookInstance.start()
+      console.log('[SelectionHook] listening for text selections')
+    } catch (e) {
+      console.error('[SelectionHook] failed to start:', (e as Error).message)
+      selectionHookInstance = null
+    }
+  } else if (!want && selectionHookInstance) {
+    try {
+      selectionHookInstance.stop()
+      selectionHookInstance.cleanup()
+    } catch { /* ignore */ }
+    selectionHookInstance = null
+    console.log('[SelectionHook] stopped')
+  }
+}
+
+// ---------------------------------------------------------------------------
 // App lifecycle
 // ---------------------------------------------------------------------------
 app.on('window-all-closed', () => {
@@ -674,9 +809,11 @@ app.whenReady().then(() => {
   initSettings((updated) => {
     updateTextSelectionShortcut(updated)
     updateCaptureShortcut(updated)
+    updateSelectionHook(updated)
   })
   updateTextSelectionShortcut(getSettings())
   updateCaptureShortcut(getSettings())
+  updateSelectionHook(getSettings())
 
   initAIService()
 

@@ -20,6 +20,10 @@ const api = {
     subscribe('cancel-requests', () => cb()),
   onDisplayContent: (cb: (content: string) => void) =>
     subscribe('display-content', (_e, content) => cb(content)),
+  onSelectionText: (cb: (text: string) => void) =>
+    subscribe('selection-text', (_e, text) => cb(text)),
+  selectionToolbarAction: (action: 'translate' | 'dismiss') =>
+    ipcRenderer.invoke('selection-toolbar-action', action),
   onAppendScreenshot: (cb: (data: any) => void) =>
     subscribe('append-screenshot', (_e, data) => cb(data)),
 

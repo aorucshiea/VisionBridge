@@ -6,10 +6,11 @@ import type { TFunc } from './ui'
 interface AppearanceSectionProps {
   settings: {
     enableTextSelection: boolean
+    selectionTrigger: 'auto' | 'hotkey'
     theme: string
     language: string
   }
-  onPatch: (patch: Partial<{ enableTextSelection: boolean; theme: ThemeName; language: 'zh' | 'en' }>) => void
+  onPatch: (patch: Partial<{ enableTextSelection: boolean; selectionTrigger: 'auto' | 'hotkey'; theme: ThemeName; language: 'zh' | 'en' }>) => void
   theme: ThemeConfig
   t: TFunc
 }
@@ -92,6 +93,39 @@ const AppearanceSection: React.FC<AppearanceSectionProps> = ({ settings, onPatch
             theme={theme}
           />
         </div>
+
+        {/* Trigger mode — only meaningful when text selection is on. */}
+        {settings.enableTextSelection && (
+          <div className="flex items-center justify-between gap-4 px-4 py-3.5">
+            <p className="text-[13px] font-semibold" style={{ color: theme.text }}>{t('selectionTrigger')}</p>
+            <div
+              className="inline-flex p-0.5 rounded-[9px] border"
+              style={{ backgroundColor: theme.inputBg, borderColor: theme.inputBorder }}
+              role="group"
+              aria-label={t('selectionTrigger')}
+            >
+              {([['auto', 'triggerAuto'], ['hotkey', 'triggerHotkey']] as const).map(([id, key]) => {
+                const selected = settings.selectionTrigger === id
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => onPatch({ selectionTrigger: id })}
+                    className="px-3 py-1.5 rounded-[7px] text-[11px] font-semibold transition-[background-color,color] duration-base ease-out-quart"
+                    style={{
+                      backgroundColor: selected ? theme.card : 'transparent',
+                      color: selected ? theme.text : theme.textMuted,
+                      boxShadow: selected ? `0 1px 2px ${theme.hairline}` : undefined,
+                    }}
+                  >
+                    {t(key)}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Palette */}
         <div className="px-4 py-3.5 space-y-2.5">

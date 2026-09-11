@@ -4,6 +4,7 @@ import { Settings as SettingsIcon, ScanLine, MessageSquare, Save, Check, Minus, 
 import ScreenshotMask from './components/ScreenshotMask'
 import ResultView from './components/ResultView'
 import TextChat from './components/TextChat'
+import SelectionToolbar from './components/SelectionToolbar'
 import PipelineSelector, { AdvancedModeCard } from './components/settings/PipelineSelector'
 import PipelineBuilder from './components/settings/PipelineBuilder'
 import OfficialPresets from './components/settings/OfficialPresets'
@@ -146,7 +147,7 @@ function App() {
       }
     }).catch(() => { /* transient — the save button still works */ })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings.enableTextSelection, windowType])
+  }, [settings.enableTextSelection, settings.selectionTrigger, windowType])
 
   useEffect(() => {
     if (windowType !== 'main') {
@@ -392,6 +393,11 @@ function App() {
   }
 
   if (windowType === 'result') return <ResultView />
+  if (windowType === 'selection-toolbar') return (
+    <div className="w-full h-full bg-transparent overflow-hidden no-drag">
+      <SelectionToolbar />
+    </div>
+  )
   if (windowType === 'mask') return (
     <div className="w-screen h-screen bg-transparent overflow-hidden no-drag">
       <ScreenshotMask onCapture={handleCapture} onCancel={() => window.ipcRenderer.closeMask()} />
@@ -706,6 +712,7 @@ function App() {
               theme={currentTheme}
               t={t}
             />
+
           </div>
         )}
       </main>

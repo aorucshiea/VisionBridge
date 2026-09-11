@@ -43,6 +43,7 @@ export interface AppSettings {
 
   // Text Selection Feature
   enableTextSelection: boolean
+  selectionTrigger: 'auto' | 'hotkey'
 
   // Node-based pipelines (advanced mode)
   advancedMode: boolean

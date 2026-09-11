@@ -30,6 +30,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   llm2TranslatePrompt: '图片描述：\n{json_data}\n\n请根据以上图片描述进行翻译。直接输出翻译结果，不要说冗余的话。',
   llm2ExplainPrompt: '图片描述：\n{json_data}\n\n请根据以上图片描述进行详细解释。直接输出解释内容，不要说冗余的话。',
   enableTextSelection: false,
+  selectionTrigger: 'auto',
   theme: 'light',
   language: 'zh',
   trayIconPath: '',

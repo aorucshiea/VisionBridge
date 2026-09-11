@@ -44,6 +44,9 @@ export interface TranslationDict {
   features: string
   textSelection: string
   textSelectionDesc: string
+  selectionTrigger: string
+  triggerAuto: string
+  triggerHotkey: string
   appearance: string
   theme: string
   language: string
@@ -206,7 +209,10 @@ export const translations: Record<'zh' | 'en', TranslationDict> = {
     delete: '删除',
     features: '功能设置',
     textSelection: '划词翻译',
-    textSelectionDesc: '选中文字自动翻译',
+    textSelectionDesc: '选中文字自动弹出翻译工具条',
+    selectionTrigger: '取词方式',
+    triggerAuto: '划词自动',
+    triggerHotkey: '仅快捷键',
     appearance: '外观设置',
     theme: '主题',
     language: '语言',
@@ -367,7 +373,10 @@ export const translations: Record<'zh' | 'en', TranslationDict> = {
     delete: 'Delete',
     features: 'Features',
     textSelection: 'Text Selection',
-    textSelectionDesc: 'Select text, then press Alt+T to translate',
+    textSelectionDesc: 'Select text and a translate toolbar pops up',
+    selectionTrigger: 'Trigger mode',
+    triggerAuto: 'On selection',
+    triggerHotkey: 'Hotkey only',
     appearance: 'Appearance',
     theme: 'Theme',
     language: 'Language',
