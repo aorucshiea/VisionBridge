@@ -223,7 +223,7 @@ ipcMain.handle('hide-mask', () => {
 })
 
 /** Shared result-window positioning: keep the card on-screen near a point. */
-async function showResultWindow(x: number, y: number, content: string): Promise<void> {
+async function showResultWindow(x: number, y: number, content: string, processing = false): Promise<void> {
   if (!resultWin || resultWin.isDestroyed()) createResultWindow()
 
   if (resultWin?.webContents.isLoading()) {
@@ -252,11 +252,13 @@ async function showResultWindow(x: number, y: number, content: string): Promise<
 
   resultWin!.setPosition(Math.round(finalX), Math.round(finalY))
   resultWin!.show()
-  resultWin!.webContents.send('display-content', content)
+  // "processing" shows the sweep animation instead of treating the placeholder
+  // text as final content (which killed the skeleton and froze the card).
+  resultWin!.webContents.send(processing ? 'display-processing' : 'display-content', content)
 }
 
-ipcMain.handle('show-result', async (_event, { x, y, content }: { x: number; y: number; content: string }) => {
-  await showResultWindow(x, y, content)
+ipcMain.handle('show-result', async (_event, { x, y, content, processing }: { x: number; y: number; content: string; processing?: boolean }) => {
+  await showResultWindow(x, y, content, processing === true)
 })
 
 ipcMain.handle('hide-result', () => resultWin?.hide())
@@ -637,7 +639,7 @@ async function handleTextSelection(): Promise<void> {
       return
     }
 
-    await showResultWindow(point.x + 12, point.y + 12, working)
+    await showResultWindow(point.x + 12, point.y + 12, working, true)
     const runner = resolveTextRunner(settings)
     const result = await callAI(runner.config, { prompt: runner.promptFor('translate', text) })
     await showResultWindow(point.x + 12, point.y + 12, result)
@@ -780,7 +782,7 @@ ipcMain.handle('selection-toolbar-action', async (_event, payload: any) => {
   try {
     const settings = getSettings()
     const working = settings.language === 'en' ? 'Translating...' : '翻译中...'
-    await showResultWindow(x + 12, y + 12, working)
+    await showResultWindow(x + 12, y + 12, working, true)
 
     const runner = resolveTextRunner(settings)
     let prompt: string

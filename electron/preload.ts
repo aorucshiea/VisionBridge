@@ -20,6 +20,9 @@ const api = {
     subscribe('cancel-requests', () => cb()),
   onDisplayContent: (cb: (content: string) => void) =>
     subscribe('display-content', (_e, content) => cb(content)),
+  /** Result card enters the "working" animation state (no content yet). */
+  onDisplayProcessing: (cb: () => void) =>
+    subscribe('display-processing', () => cb()),
   /** Streaming deltas for the result card ({content?, reasoning?} per event). */
   onDisplayDelta: (cb: (delta: { content?: string; reasoning?: string }) => void) =>
     subscribe('display-delta', (_e, delta) => cb(delta)),
@@ -37,7 +40,7 @@ const api = {
   // Screenshot / windows
   captureScreen: () => ipcRenderer.invoke('capture-screen'),
   sendProcessScreenshot: (data: { region: any; action: string }) => ipcRenderer.send('process-screenshot', data),
-  showResult: (data: { x: number; y: number; content: string }) => ipcRenderer.invoke('show-result', data),
+  showResult: (data: { x: number; y: number; content: string; processing?: boolean }) => ipcRenderer.invoke('show-result', data),
   hideResult: () => ipcRenderer.invoke('hide-result'),
   /** Forward pipeline deltas from the main window to the result card. */
   streamResultDelta: (delta: { content?: string; reasoning?: string }) =>
