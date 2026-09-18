@@ -449,7 +449,7 @@ ipcMain.handle('test-connection', async (_event, config: any) => {
         messages: [{ role: 'user', content: 'OK' }],
       }, {
         headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
-        timeout: 10000,
+        timeout: 180000,
       })
       return { success: true, available: true, message: i18n.connected() }
     }
