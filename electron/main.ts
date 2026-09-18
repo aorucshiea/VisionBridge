@@ -1,10 +1,11 @@
 import { app, BrowserWindow, globalShortcut, Tray, Menu, ipcMain, desktopCapturer, screen, clipboard } from 'electron'
+import type { IpcMainInvokeEvent } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
 import { spawn } from 'node:child_process'
 import axios from 'axios'
 import { initSettings, getSettings, writeSettings } from './settings'
-import { initAIService, callAI } from './ai'
+import { initAIService, callAI, callAIStream, type StreamSend } from './ai'
 import { wireOf } from '../src/lib/providers'
 
 // Disable hardware acceleration to fix transparency issues on some Windows machines
@@ -278,6 +279,60 @@ ipcMain.handle('chat-with-ai', async (_event, messages: Array<{ role: string; co
     prompt: messages[messages.length - 1].content,
     messages: messages.map(m => ({ role: m.role, content: m.content })),
   })
+})
+
+// Streaming twins of call-ai / chat-with-ai: each delta is pushed to the
+// requesting window as ('ai-delta', reqId, delta) so the caller can render
+// tokens (and the model's reasoning) as they arrive.
+function streamSend(event: IpcMainInvokeEvent, reqId: string): StreamSend {
+  return (delta) => {
+    try {
+      if (!event.sender.isDestroyed()) event.sender.send('ai-delta', reqId, delta)
+    } catch { /* window closed mid-stream */ }
+  }
+}
+
+ipcMain.handle('call-ai-stream', async (event, reqId: string, config: any, payload: any) => {
+  return await callAIStream(config, payload, streamSend(event, reqId))
+})
+
+ipcMain.handle('chat-with-ai-stream', async (event, reqId: string, messages: Array<{ role: string; content: string }>) => {
+  const settings = getSettings()
+  const config: { provider: string; apiKey: string; baseUrl: string; model: string } =
+    settings.mode === 'TEXT'
+      ? resolveTextRunner(settings).config
+      : settings.mode === 'VLM'
+        ? { provider: settings.vlmProvider, apiKey: settings.vlmApiKey, baseUrl: settings.vlmBaseUrl, model: settings.vlmModel }
+        : { provider: settings.llmProvider, apiKey: settings.llmApiKey, baseUrl: settings.llmBaseUrl, model: settings.llmModel }
+
+  return await callAIStream(config, {
+    prompt: messages[messages.length - 1].content,
+    messages: messages.map(m => ({ role: m.role, content: m.content })),
+  }, streamSend(event, reqId))
+})
+
+// The main window runs the pipeline, but the floating result card displays it:
+// forward renderer deltas there ('display-delta' → ResultView).
+ipcMain.on('stream-result-delta', (_event, delta: { content?: string; reasoning?: string }) => {
+  try {
+    if (resultWin && !resultWin.isDestroyed()) resultWin.webContents.send('display-delta', delta)
+  } catch { /* ignore */ }
+})
+
+// The result card reports its natural content height; grow the frameless
+// window to fit (clamped to 70% of the work area) so long answers stay
+// readable without a tiny always-scrolling viewport.
+ipcMain.handle('resize-result', (_event, height: number) => {
+  if (!resultWin || resultWin.isDestroyed()) return
+  const maxH = Math.min(Math.round(screen.getPrimaryDisplay().workArea.height * 0.7), 640)
+  const h = Math.max(200, Math.min(Math.round(height), maxH))
+  const old = resultWin.getBounds()
+  if (old.height === h) return
+  resultWin.setBounds({ ...old, height: h })
+  const workArea = screen.getDisplayNearestPoint({ x: old.x, y: old.y }).workArea
+  if (old.y + h > workArea.y + workArea.height) {
+    resultWin.setPosition(old.x, Math.max(workArea.y, workArea.y + workArea.height - h - 10))
+  }
 })
 
 ipcMain.handle('capture-screen', async () => {

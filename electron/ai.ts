@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import axios from 'axios'
 import { wireOf } from '../src/lib/providers'
+import { createChatStreamParser } from '../src/lib/sse'
 
 export interface AIRequestPayload {
   prompt: string
@@ -213,6 +214,160 @@ export async function callAI(config: AIServiceConfig, payload: AIRequestPayload)
   } catch (e: any) {
     if (e.name === 'AbortError') throw e
     throw new Error(`${config.provider} AI Error: ${extractErrorMessage(e)}`)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Streaming variant of callAI. Parses SSE (OpenAI wire) or NDJSON (Ollama)
+// incrementally, forwarding {content, reasoning} deltas through `send` as they
+// arrive. Falls back to one non-streaming request (still extracting
+// reasoning_content) when the server refuses to stream. Anthropic keeps its
+// non-streaming shape (its SSE uses event-typed blocks) but now surfaces
+// thinking blocks too.
+// ---------------------------------------------------------------------------
+
+export interface AIStreamResult {
+  content: string
+  reasoning: string
+}
+
+export type StreamSend = (delta: { content?: string; reasoning?: string }) => void
+
+export async function callAIStream(
+  config: AIServiceConfig,
+  payload: AIRequestPayload,
+  send?: StreamSend,
+): Promise<AIStreamResult> {
+  const { apiKey, baseUrl, model } = config
+  const wire = wireOf(config.provider)
+  const safeUrl = cleanUrl(baseUrl)
+  const trimmedModel = model ? model.trim() : ''
+
+  if (!trimmedModel) {
+    throw new Error('Model is required but not provided')
+  }
+
+  if (wire === 'anthropic') {
+    const content: any[] = []
+    if (payload.images) {
+      payload.images.forEach(img => {
+        content.push({
+          type: 'image',
+          source: { type: 'base64', media_type: 'image/jpeg', data: img },
+        })
+      })
+    }
+    content.push({ type: 'text', text: payload.prompt })
+
+    const response = await request({ url: `${safeUrl}/v1/messages` }, {
+      model: trimmedModel,
+      max_tokens: 2048,
+      messages: [{ role: 'user', content }],
+    }, {
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'Content-Type': 'application/json',
+      },
+    })
+
+    const blocks: any[] = response.data?.content || []
+    const text = blocks.filter(b => b?.type === 'text').map(b => String(b.text || '')).join('')
+    const thinking = blocks.filter(b => b?.type === 'thinking').map(b => String(b.thinking || '')).join('')
+    if (thinking) send?.({ reasoning: thinking })
+    if (text) send?.({ content: text })
+    return { content: text || '(No text content returned from Claude)', reasoning: thinking }
+  }
+
+  const url = wire === 'ollama' ? `${safeUrl}/api/chat` : `${safeUrl}/v1/chat/completions`
+  let messages: any[]
+  if (payload.messages) {
+    messages = payload.messages
+  } else if (wire === 'ollama') {
+    messages = [{ role: 'user', content: payload.prompt, images: payload.images }]
+  } else if (payload.images && payload.images.length > 0) {
+    messages = [{
+      role: 'user',
+      content: [
+        { type: 'text', text: payload.prompt },
+        ...payload.images.map(img => ({
+          type: 'image_url',
+          image_url: { url: `data:image/jpeg;base64,${img}` },
+        })),
+      ],
+    }]
+  } else {
+    messages = [{ role: 'user', content: payload.prompt }]
+  }
+
+  const body = { model: trimmedModel, messages, stream: true }
+  const headers: Record<string, string> = wire === 'ollama'
+    ? { 'Content-Type': 'application/json' }
+    : { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' }
+
+  const signal = beginRequest()
+  let gotDelta = false
+  try {
+    const response = await axios.post(url, body, {
+      headers,
+      responseType: 'stream',
+      timeout: 300000,
+      signal,
+    })
+
+    const parser = createChatStreamParser()
+    let content = ''
+    let reasoning = ''
+    const emit = (d: { content?: string; reasoning?: string }) => {
+      if (d.content) content += d.content
+      if (d.reasoning) reasoning += d.reasoning
+      gotDelta = true
+      try { send?.(d) } catch { /* renderer vanished mid-stream */ }
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      const stream: any = response.data
+      stream.on('data', (buf: Buffer) => {
+        if (signal.aborted) { stream.destroy(); return }
+        for (const d of parser.feed(buf.toString('utf-8'))) emit(d)
+      })
+      stream.on('end', () => resolve())
+      stream.on('error', (err: Error) => reject(err))
+    })
+
+    if (signal.aborted) throw abortError()
+    for (const d of parser.flush()) emit(d)
+
+    if (!content && !reasoning) throw new Error('流式响应为空')
+    return { content, reasoning }
+  } catch (e: any) {
+    if (signal.aborted) throw abortError()
+    // Mid-stream failure: surface it instead of silently restarting.
+    if (gotDelta) throw e
+    // Server refused to stream (or returned a plain JSON error): fall back to
+    // one non-streaming request that still extracts the reasoning part.
+    try {
+      const plain = await request({ url }, { ...body, stream: false }, { headers, timeout: 300000 })
+      const data = plain.data
+      const msg = wire === 'ollama'
+        ? data?.message
+        : data?.choices?.[0]?.message
+      const text = typeof msg?.content === 'string' ? msg.content : ''
+      const reasoning =
+        typeof msg?.reasoning_content === 'string' ? msg.reasoning_content
+        : typeof msg?.reasoning === 'string' ? msg.reasoning
+        : typeof msg?.thinking === 'string' ? msg.thinking
+        : ''
+      if (!text || text.trim() === '') throw unwrapGatewayError(data, trimmedModel)
+      if (reasoning) send?.({ reasoning })
+      send?.({ content: text })
+      return { content: text, reasoning }
+    } catch (fallbackError: any) {
+      if (fallbackError?.name === 'AbortError') throw fallbackError
+      throw new Error(`${config.provider} AI Error: ${extractErrorMessage(fallbackError) || e?.message}`)
+    }
+  } finally {
+    endRequest(signal)
   }
 }
 

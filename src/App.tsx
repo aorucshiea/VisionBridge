@@ -231,6 +231,8 @@ function App() {
         task,
         taskPrompts: taskPromptsOf(settings),
         promptOverride,
+        // The main window runs the chain; the floating result card renders it.
+        onDelta: (d) => { try { window.ipcRenderer.streamResultDelta?.(d) } catch { /* ignore */ } },
       })
 
       if (!abortController.signal.aborted) {
