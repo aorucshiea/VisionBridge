@@ -51,6 +51,7 @@ const TEST_I18N: Record<'zh' | 'en', Record<string, (a?: string, b?: string) => 
     modelNotFound: (model, list) => `模型 ${model} 未找到，可用模型: ${list}`,
     unsupported: (provider) => `不支持的 provider: ${provider}`,
     failed: (msg) => `连接失败: ${msg}`,
+    modelLoadTimeout: (model) => `服务器已连通，但模型 ${model} 加载超时（大模型冷加载可能需要 1-3 分钟）。请先在 LM Studio 中手动加载模型，或稍后重试`,
   },
   en: {
     connected: () => 'Connection successful',
@@ -58,6 +59,7 @@ const TEST_I18N: Record<'zh' | 'en', Record<string, (a?: string, b?: string) => 
     modelNotFound: (model, list) => `Model ${model} not found. Available models: ${list}`,
     unsupported: (provider) => `Unsupported provider: ${provider}`,
     failed: (msg) => `Connection failed: ${msg}`,
+    modelLoadTimeout: (model) => `Server reachable, but model ${model} timed out while loading (cold start can take minutes). Load the model manually in LM Studio first, then retry`,
   },
 }
 
@@ -430,16 +432,47 @@ ipcMain.handle('test-connection', async (_event, config: any) => {
     }
 
     if (wire === 'openai' || wire === 'custom') {
-      await axios.post(`${cleanBaseUrl}/v1/chat/completions`, {
-        model,
-        messages: [{ role: 'user', content: 'OK' }],
-        max_tokens: 1,
-        stream: false,
-      }, {
-        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-        timeout: 10000,
-      })
-      return { success: true, available: true, message: i18n.connected() }
+      // Two-stage test (LM Studio JIT loading friendly):
+      //  1. GET /v1/models — never triggers a model load, proves the server is reachable
+      //  2. POST /v1/chat/completions — the real generation test; may trigger a cold
+      //     model load (a 35B Q4 can take minutes), hence the generous timeout.
+      try {
+        const list = await axios.get(`${cleanBaseUrl}/v1/models`, {
+          headers: { 'Authorization': `Bearer ${apiKey}` },
+          timeout: 8000,
+        })
+        const ids: string[] = ((list.data?.data || []) as any[])
+          .map((m) => String(m.id || m.name || ''))
+          .filter(Boolean)
+        if (ids.length > 0 && model && !ids.some((id) => id === model || model.startsWith(id) || id.startsWith(model))) {
+          return { success: true, available: false, message: i18n.modelNotFound(model, ids.join(', ')) }
+        }
+      } catch (e: any) {
+        if (!e.response) {
+          // Network-level failure: the server is not reachable at all.
+          return { success: false, available: false, message: i18n.failed(e.message) }
+        }
+        // Server reachable but /v1/models misbehaves — fall through to the completion test.
+      }
+
+      try {
+        await axios.post(`${cleanBaseUrl}/v1/chat/completions`, {
+          model,
+          messages: [{ role: 'user', content: 'OK' }],
+          max_tokens: 1,
+          stream: false,
+        }, {
+          headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+          timeout: 180000,
+        })
+        return { success: true, available: true, message: i18n.connected() }
+      } catch (e: any) {
+        if (e.code === 'ECONNABORTED' || e.code === 'ETIMEDOUT') {
+          // Client gave up while the server was (most likely) still cold-loading the model.
+          return { success: false, available: true, message: i18n.modelLoadTimeout(model) }
+        }
+        throw e
+      }
     }
 
     if (wire === 'anthropic') {
