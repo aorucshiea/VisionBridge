@@ -75,11 +75,13 @@ const api = {
   callTTS: (config: any, text: string) => ipcRenderer.invoke('call-tts', config, text),
   callASR: (config: any, audioBase64: string) => ipcRenderer.invoke('call-asr', config, audioBase64),
   cancelAiRequests: () => ipcRenderer.invoke('cancel-ai-requests'),
-  chatWithAI: (messages: Array<{ role: string; content: string }>) => ipcRenderer.invoke('chat-with-ai', messages),
+  chatWithAI: (messages: Array<{ role: string; content: string }>, images?: string[]) =>
+    ipcRenderer.invoke('chat-with-ai', messages, images),
   /** Streaming chat-with-ai — same delta bridge as callAIStream. */
   chatWithAIStream: (
     messages: Array<{ role: string; content: string }>,
     onDelta?: (d: { content?: string; reasoning?: string }) => void,
+    images?: string[],
   ) =>
     new Promise<{ content: string; reasoning: string }>((resolve, reject) => {
       const reqId = `chat${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
@@ -88,7 +90,7 @@ const api = {
         try { onDelta?.(delta) } catch { /* ignore */ }
       }
       ipcRenderer.on('ai-delta', listener)
-      ipcRenderer.invoke('chat-with-ai-stream', reqId, messages)
+      ipcRenderer.invoke('chat-with-ai-stream', reqId, messages, images)
         .then((v) => { ipcRenderer.removeListener('ai-delta', listener); resolve(v) })
         .catch((e) => { ipcRenderer.removeListener('ai-delta', listener); reject(e) })
     }),

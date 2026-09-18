@@ -263,7 +263,7 @@ ipcMain.handle('show-result', async (_event, { x, y, content, processing }: { x:
 
 ipcMain.handle('hide-result', () => resultWin?.hide())
 
-ipcMain.handle('chat-with-ai', async (_event, messages: Array<{ role: string; content: string }>) => {
+ipcMain.handle('chat-with-ai', async (_event, messages: Array<{ role: string; content: string }>, images?: string[]) => {
   const settings = getSettings()
   let config: { provider: string; apiKey: string; baseUrl: string; model: string }
   if (settings.mode === 'TEXT') {
@@ -280,6 +280,7 @@ ipcMain.handle('chat-with-ai', async (_event, messages: Array<{ role: string; co
   return await callAI(config, {
     prompt: messages[messages.length - 1].content,
     messages: messages.map(m => ({ role: m.role, content: m.content })),
+    images: images && images.length ? images : undefined,
   })
 })
 
@@ -298,7 +299,7 @@ ipcMain.handle('call-ai-stream', async (event, reqId: string, config: any, paylo
   return await callAIStream(config, payload, streamSend(event, reqId))
 })
 
-ipcMain.handle('chat-with-ai-stream', async (event, reqId: string, messages: Array<{ role: string; content: string }>) => {
+ipcMain.handle('chat-with-ai-stream', async (event, reqId: string, messages: Array<{ role: string; content: string }>, images?: string[]) => {
   const settings = getSettings()
   const config: { provider: string; apiKey: string; baseUrl: string; model: string } =
     settings.mode === 'TEXT'
@@ -310,6 +311,7 @@ ipcMain.handle('chat-with-ai-stream', async (event, reqId: string, messages: Arr
   return await callAIStream(config, {
     prompt: messages[messages.length - 1].content,
     messages: messages.map(m => ({ role: m.role, content: m.content })),
+    images: images && images.length ? images : undefined,
   }, streamSend(event, reqId))
 })
 
