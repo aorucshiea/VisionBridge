@@ -102,6 +102,10 @@ export interface AppSettings {
   enableTextSelection: boolean
   /** How selected text is picked up: automatic on selection, or hotkey only. */
   selectionTrigger: 'auto' | 'hotkey'
+  // System assistant (小V)
+  assistantName: string
+  soulPrompt: string
+
   theme: ThemeName
   language: Language
   trayIconPath: string
@@ -202,7 +206,17 @@ export type ProcessMode = 'translate' | 'explain'
 
 declare global {
   interface Window {
-    ipcRenderer: import('../../electron/preload').IpcApi
+    ipcRenderer: import('../lib/ipc').IpcApi
     currentAbortController: AbortController | null
+    /**
+     * Injected by Rust (`init_script` in main.rs) before any script runs —
+     * the authoritative window identity, since Tauri drops the `?window=`
+     * query from the asset URL.
+     */
+    __VB_WINDOW__?: string
+    __VB_ERRORS__?: string[]
+    __VB_BUNDLE_LOADED__?: boolean
+    /** Set by the injected script when the app was started with `VB_DIAG=1`. */
+    __VB_DIAG__?: boolean
   }
 }
