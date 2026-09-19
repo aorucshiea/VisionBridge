@@ -167,6 +167,11 @@ export interface TranslationDict {
   xvMemoryPlaceholder: string
   xvPlaceholder: string
   xvAgentOn: string
+  xvModel: string
+  xvModelAuto: string
+  xvModelCustom: string
+  xvModelAutoHint: string
+  xvModelPick: string
   appearance: string
   theme: string
   language: string
@@ -457,6 +462,11 @@ export const translations: Record<'zh' | 'en', TranslationDict> = {
     xvMemoryPlaceholder: '添加一条记忆…',
     xvPlaceholder: '让小V 做点什么…',
     xvAgentOn: 'Agent 模式',
+    xvModel: '小V 模型',
+    xvModelAuto: '自动',
+    xvModelCustom: '自定义',
+    xvModelAutoHint: '自动：跟随主配置回退链（当前模式的模型 → 对话模型 → 视觉模型）。切到自定义可指定小V 专用模型。',
+    xvModelPick: '选择模型',
     appearance: '外观设置',
     theme: '主题',
     language: '语言',
@@ -745,6 +755,11 @@ export const translations: Record<'zh' | 'en', TranslationDict> = {
     xvMemoryPlaceholder: 'Add a memory…',
     xvPlaceholder: 'Ask XiaoV to do something…',
     xvAgentOn: 'Agent mode',
+    xvModel: 'XiaoV model',
+    xvModelAuto: 'Auto',
+    xvModelCustom: 'Custom',
+    xvModelAutoHint: 'Auto: follow the settings fallback chain (current mode → chat model → vision model). Switch to Custom to pin a dedicated model.',
+    xvModelPick: 'Pick model',
     appearance: 'Appearance',
     theme: 'Theme',
     language: 'Language',
