@@ -206,7 +206,9 @@ export type ProcessMode = 'translate' | 'explain'
 
 declare global {
   interface Window {
-    ipcRenderer: import('../lib/ipc').IpcApi
+    // Electron: the preload bridge (src/lib/ipc is Tauri-only and does not
+    // exist in this repo — never point this at ../lib/ipc here).
+    ipcRenderer: import('../../electron/preload').IpcApi
     currentAbortController: AbortController | null
     /**
      * Injected by Rust (`init_script` in main.rs) before any script runs —

@@ -58,6 +58,10 @@ export interface AppSettings {
   // Saved Configurations
   savedConfigurations: SavedConfiguration[]
 
+  // System assistant (小V)
+  assistantName: string
+  soulPrompt: string
+
   // UI Settings
   closeAction: 'tray' | 'quit'
   theme: 'light' | 'dark' | 'moonlight' | 'arctic'

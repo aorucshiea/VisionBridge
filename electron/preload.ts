@@ -39,6 +39,7 @@ const api = {
 
   // Screenshot / windows
   captureScreen: () => ipcRenderer.invoke('capture-screen'),
+  openXiaoV: () => ipcRenderer.invoke('open-xiao-v'),
   sendProcessScreenshot: (data: { region: any; action: string }) => ipcRenderer.send('process-screenshot', data),
   showResult: (data: { x: number; y: number; content: string; processing?: boolean }) => ipcRenderer.invoke('show-result', data),
   hideResult: () => ipcRenderer.invoke('hide-result'),

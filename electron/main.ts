@@ -170,9 +170,35 @@ function createResultWindow() {
   loadWindowUrl(resultWin, '?window=result')
 }
 
+let xvWin: BrowserWindow | null = null
+
+function createXiaoVWindow(): void {
+  if (xvWin && !xvWin.isDestroyed()) {
+    xvWin.show()
+    xvWin.focus()
+    return
+  }
+  xvWin = new BrowserWindow({
+    width: 430,
+    height: 660,
+    minWidth: 360,
+    minHeight: 480,
+    show: true,
+    frame: false,
+    backgroundColor: '#00000000',
+    webPreferences: SECURE_WEB_PREFERENCES,
+  })
+  loadWindowUrl(xvWin, '?window=xiao-v')
+  xvWin.on('closed', () => { xvWin = null })
+}
+
 // ---------------------------------------------------------------------------
 // IPC Handlers
 // ---------------------------------------------------------------------------
+ipcMain.handle('open-xiao-v', () => {
+  createXiaoVWindow()
+  return { success: true }
+})
 ipcMain.handle('minimize-window', () => win?.minimize())
 ipcMain.handle('maximize-window', () => {
   if (!win) return
