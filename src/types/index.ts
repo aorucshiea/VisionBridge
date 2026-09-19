@@ -105,6 +105,8 @@ export interface AppSettings {
   // System assistant (小V)
   assistantName: string
   soulPrompt: string
+  /** Explicit brain model for 小V; null = follow the settings fallback chain. */
+  xvModelConfig: { provider: string; apiKey: string; baseUrl: string; model: string } | null
 
   theme: ThemeName
   language: Language
@@ -206,8 +208,8 @@ export type ProcessMode = 'translate' | 'explain'
 
 declare global {
   interface Window {
-    // Electron: the preload bridge (src/lib/ipc is Tauri-only and does not
-    // exist in this repo — never point this at ../lib/ipc here).
+    // Electron: the preload bridge (src/lib/ipc is Tauri-only — never point
+    // this at ../lib/ipc here).
     ipcRenderer: import('../../electron/preload').IpcApi
     currentAbortController: AbortController | null
     /**
