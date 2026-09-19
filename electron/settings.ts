@@ -122,7 +122,12 @@ export function initSettings(onSaved?: (settings: AppSettings) => void) {
 
   ipcMain.handle('save-settings', (_e, settings: AppSettings) => {
     try {
-      writeSettings({ ...defaultSettings, ...settings })
+      // `savedConfigurations` is owned by the dedicated save/get/delete
+      // handlers. The renderer round-trips a snapshot taken at startup, so
+      // trusting its copy here would wipe every saved profile on each
+      // settings save — overlay the disk value instead.
+      const savedConfigurations = getSettings().savedConfigurations ?? []
+      writeSettings({ ...defaultSettings, ...settings, savedConfigurations })
       onSaved?.(getSettings())
       return { success: true }
     } catch (e: any) {
